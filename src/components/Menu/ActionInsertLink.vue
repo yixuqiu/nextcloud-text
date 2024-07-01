@@ -1,22 +1,8 @@
 <!--
-  - @copyright Copyright (c) 2022
-  -
-  - @license AGPL-3.0-or-later
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -
-  -->
+  - SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 <template>
 	<NcActions class="entry-action entry-action__insert-link"
 		:title="actionEntry.label"
@@ -200,7 +186,7 @@ export default {
 			// Avoid issues when parsing urls later on in markdown that might be entered in an invalid format (e.g. "mailto: example@example.com")
 			const href = url.replaceAll(' ', '%20')
 			const chain = this.$editor.chain()
-			// Check if any text is selected, if not insert the lunk using the given text property
+			// Check if any text is selected, if not insert the link using the given text property
 			if (this.$editor.view.state?.selection.empty) {
 				chain.insertContent({
 					type: 'paragraph',
@@ -231,11 +217,12 @@ export default {
 		linkPicker() {
 			getLinkWithPicker(null, true)
 				.then(link => {
-					this.$editor
-						.chain()
-						.focus()
-						.insertContent(link + ' ')
-						.run()
+					const chain = this.$editor.chain()
+					if (this.$editor.view.state?.selection.empty) {
+						chain.focus().insertPreview(link).run()
+					} else {
+						chain.setLink({ href: link }).focus().run()
+					}
 				})
 				.catch(error => {
 					console.error('Smart picker promise rejected', error)

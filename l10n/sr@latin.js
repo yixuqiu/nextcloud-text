@@ -8,11 +8,12 @@ OC.L10N.register(
     "Offline" : "Van mreže",
     "Bold" : "Podebljano",
     "Italic" : "Kurziv",
+    "Link" : "Veza",
+    "Undo" : "Opozovi",
     "Cancel" : "Poništi",
     "Replace" : "Zameni postojeću",
     "Edit" : "Uredi",
     "Source code" : "Izvorni kôd",
-    "Undo" : "Opozovi",
     "Info" : "Info",
     "Warning" : "Upozorenje"
 },

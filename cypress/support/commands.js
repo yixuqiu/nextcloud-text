@@ -1,23 +1,6 @@
 /**
- * @copyright Copyright (c) 2019 John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 import axios from '@nextcloud/axios'
@@ -212,6 +195,17 @@ Cypress.Commands.add('moveFile', (path, destinationPath) => {
 	}).then(response => response.body)
 })
 
+// For files wait for preview to load and release lock
+Cypress.Commands.add('waitForPreview', name => {
+	cy.getFile(name)
+		.scrollIntoView()
+	cy.getFile(name)
+		.find('.files-list__row-icon img')
+		.should('be.visible')
+		.its('[0].naturalWidth')
+		.should('be.greaterThan', 0)
+})
+
 Cypress.Commands.add('deleteFile', (path) => {
 	return axios.delete(`${url}/remote.php/webdav/${path}`)
 })
@@ -320,7 +314,7 @@ Cypress.Commands.add('closeInterceptedSession', (shareToken = undefined) => {
 })
 
 Cypress.Commands.add('getFile', fileName => {
-	return cy.get(`[data-cy-files-list] tr[data-cy-files-list-row-name="${fileName}"]`)
+	return cy.get(`[data-cy-files-list] [data-cy-files-list-row-name="${fileName}"]`)
 
 })
 
@@ -414,7 +408,7 @@ Cypress.Commands.add('createDescription', (buttonLabel = 'Add folder description
 		.as('addDescription')
 
 	cy.get('[data-cy-files-list] tr[data-cy-files-list-row-name="Readme.md"]').should('not.exist')
-	cy.get('[data-cy-upload-picker] button.action-item__menutoggle').click()
+	cy.get('[data-cy-files-content-breadcrumbs] [data-cy-upload-picker] button.action-item__menutoggle').click()
 	cy.get('li.upload-picker__menu-entry button').contains(buttonLabel).click()
 
 	cy.wait('@addDescription')

@@ -1,3 +1,8 @@
+<!--
+  - SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 <template>
 	<div data-text-el="editor-outline" class="editor--outline" :class="{ 'editor--outline-mobile': mobile }">
 		<header class="editor--outline__header">
@@ -36,7 +41,7 @@ export default {
 	mounted() {
 		this.$resizeObserver = new ResizeObserver(this.onResize)
 		this.$resizeObserver.observe(this.$el.parentElement)
-		this.onResize()
+		this.onResize([this.$el.parentElement])
 	},
 	beforeDestroy() {
 		this.$resizeObserver.unobserve(this.$el.parentElement)

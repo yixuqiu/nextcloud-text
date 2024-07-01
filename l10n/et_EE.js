@@ -22,6 +22,9 @@ OC.L10N.register(
     "Saved" : "Salvestatud",
     "Unsaved changes" : "Salvestamata muutused",
     "Keyboard shortcuts" : "Klaviatuuri otseteed",
+    "Link" : "Link",
+    "name" : "nimi",
+    "Undo" : "Tühista",
     "Cancel" : "Tühista",
     "URL" : "URL",
     "Cannot copy, please copy the link manually" : "Ei saa kopeerida, palun kopeeri link käsitsi",
@@ -30,7 +33,6 @@ OC.L10N.register(
     "Detect language" : "Tuvasta keel",
     "Translation failed" : "Tõlkimine ebaõnnestus",
     "Edit" : "Redigeeri",
-    "Undo" : "Tühista",
     "Headings" : "Pealkirjad",
     "Info" : "Info",
     "Warning" : "Hoiatus"

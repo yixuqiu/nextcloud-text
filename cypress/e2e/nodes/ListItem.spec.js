@@ -1,3 +1,8 @@
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 /* eslint-disable import/no-named-as-default */
 import OrderedList from '@tiptap/extension-ordered-list'
 import ListItem from '@tiptap/extension-list-item'
@@ -7,8 +12,11 @@ import TaskItem from './../../../src/nodes/TaskItem.js'
 import BulletList from './../../../src/nodes/BulletList.js'
 import Markdown from './../../../src/extensions/Markdown.js'
 import { createCustomEditor } from './../../support/components.js'
-import testData from '../../fixtures/ListItem.md'
 import { loadMarkdown, runCommands, expectMarkdown } from './helpers.js'
+
+// https://github.com/import-js/eslint-plugin-import/issues/1739
+/* eslint-disable-next-line import/no-unresolved */
+import testData from '../../fixtures/ListItem.md?raw'
 
 describe('ListItem extension integrated in the editor', () => {
 

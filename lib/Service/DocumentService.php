@@ -3,25 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text\Service;
@@ -59,6 +42,7 @@ use OCP\Files\NotPermittedException;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\ICache;
 use OCP\ICacheFactory;
+use OCP\IConfig;
 use OCP\IRequest;
 use OCP\Lock\LockedException;
 use OCP\PreConditionNotMetException;
@@ -87,8 +71,9 @@ class DocumentService {
 	private IAppData $appData;
 	private ILockManager $lockManager;
 	private IUserMountCache $userMountCache;
+	private IConfig $config;
 
-	public function __construct(DocumentMapper $documentMapper, StepMapper $stepMapper, SessionMapper $sessionMapper, IAppData $appData, ?string $userId, IRootFolder $rootFolder, ICacheFactory $cacheFactory, LoggerInterface $logger, ShareManager $shareManager, IRequest $request, IManager $directManager, ILockManager $lockManager, IUserMountCache $userMountCache) {
+	public function __construct(DocumentMapper $documentMapper, StepMapper $stepMapper, SessionMapper $sessionMapper, IAppData $appData, ?string $userId, IRootFolder $rootFolder, ICacheFactory $cacheFactory, LoggerInterface $logger, ShareManager $shareManager, IRequest $request, IManager $directManager, ILockManager $lockManager, IUserMountCache $userMountCache, IConfig $config) {
 		$this->documentMapper = $documentMapper;
 		$this->stepMapper = $stepMapper;
 		$this->sessionMapper = $sessionMapper;
@@ -100,6 +85,7 @@ class DocumentService {
 		$this->shareManager = $shareManager;
 		$this->lockManager = $lockManager;
 		$this->userMountCache = $userMountCache;
+		$this->config = $config;
 		$token = $request->getParam('token');
 		if ($this->userId === null && $token !== null) {
 			try {
@@ -220,11 +206,15 @@ class DocumentService {
 	 */
 	public function addStep(Document $document, Session $session, array $steps, int $version, ?string $shareToken): array {
 		$documentId = $session->getDocumentId();
+		$readOnly = $this->isReadOnly($this->getFileForSession($session, $shareToken), $shareToken);
 		$stepsToInsert = [];
 		$querySteps = [];
 		$newVersion = $version;
 		foreach ($steps as $step) {
 			$message = YjsMessage::fromBase64($step);
+			if ($readOnly && $message->isUpdate()) {
+				continue;
+			}
 			// Filter out query steps as they would just trigger clients to send their steps again
 			if ($message->getYjsMessageType() === YjsMessage::YJS_MESSAGE_SYNC && $message->getYjsSyncType() === YjsMessage::YJS_MESSAGE_SYNC_STEP1) {
 				$querySteps[] = $step;
@@ -233,7 +223,7 @@ class DocumentService {
 			}
 		}
 		if (count($stepsToInsert) > 0) {
-			if ($this->isReadOnly($this->getFileForSession($session, $shareToken), $shareToken)) {
+			if ($readOnly) {
 				throw new NotPermittedException('Read-only client tries to push steps with changes');
 			}
 			$newVersion = $this->insertSteps($document, $session, $stepsToInsert);
@@ -276,6 +266,7 @@ class DocumentService {
 			$step->setSessionId($session->getId());
 			$step->setDocumentId($document->getId());
 			$step->setVersion(Step::VERSION_STORED_IN_ID);
+			$step->setTimestamp(time());
 			$step = $this->stepMapper->insert($step);
 			$newVersion = $step->getId();
 			$this->logger->debug("Adding steps to " . $document->getId() . ": bumping version from $stepsVersion to $newVersion");
@@ -440,7 +431,7 @@ class DocumentService {
 		}
 	}
 
-	public function getAll(): array {
+	public function getAll(): \Generator {
 		return $this->documentMapper->findAll();
 	}
 
@@ -468,7 +459,7 @@ class DocumentService {
 
 		$node = $share->getNode();
 		if ($node instanceof Folder) {
-			$node = $node->getById($session->getDocumentId())[0];
+			$node = $node->getFirstNodeById($session->getDocumentId());
 		}
 		if ($node instanceof File) {
 			return $node;
@@ -501,6 +492,14 @@ class DocumentService {
 			throw new NotFoundException();
 		}
 
+		// We currently don't know the path nor care about which file mount it is when getting by id
+		// therefore we can take a shortcut on the cached node if we have edit permissions on that
+		$file = $userFolder->getFirstNodeById($fileId);
+		if ($file instanceof File && $file->getPermissions() & Constants::PERMISSION_UPDATE) {
+			return $file;
+		}
+
+		// Ideally we'd optimize this part in the future by storing the path and getting the acutal target directly
 		$files = $userFolder->getById($fileId);
 		if (count($files) === 0) {
 			throw new NotFoundException();
@@ -626,7 +625,7 @@ class DocumentService {
 		}
 
 		try {
-			$file = $this->getFileById($fileId);
+			$file = $this->getFileById($fileId, $this->userId);
 			$this->lockManager->lock(new LockContext(
 				$file,
 				ILock::TYPE_APP,
@@ -645,13 +644,49 @@ class DocumentService {
 		}
 
 		try {
-			$file = $this->getFileById($fileId);
+			$file = $this->getFileById($fileId, $this->userId);
 			$this->lockManager->unlock(new LockContext(
 				$file,
 				ILock::TYPE_APP,
 				Application::APP_NAME
 			));
 		} catch (NoLockProviderException | PreConditionNotMetException | NotFoundException $e) {
+		}
+	}
+
+	public function countAll(): int {
+		return $this->documentMapper->countAll();
+	}
+
+	private function getFullAppFolder(): Folder {
+		$appFolder = $this->rootFolder->get('appdata_' . $this->config->getSystemValueString('instanceid', '') . '/text');
+		if (!$appFolder instanceof Folder) {
+			throw new NotFoundException('Folder not found');
+		}
+		return $appFolder;
+	}
+
+	public function clearAll(): void {
+		$this->stepMapper->clearAll();
+		$this->sessionMapper->clearAll();
+		$this->documentMapper->clearAll();
+		try {
+			$appFolder = $this->getFullAppFolder();
+			$appFolder->get('documents')->move($appFolder->getPath() . '/documents_old_' . time());
+		} catch (NotFoundException) {
+		}
+		$this->ensureDocumentsFolder();
+	}
+
+	public function cleanupOldDocumentsFolders(): void {
+		try {
+			$appFolder = $this->getFullAppFolder();
+			foreach ($appFolder->getDirectoryListing() as $node) {
+				if (str_starts_with($node->getName(), 'documents_old_')) {
+					$node->delete();
+				}
+			}
+		} catch (NotFoundException) {
 		}
 	}
 }

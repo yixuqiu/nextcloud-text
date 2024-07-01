@@ -1,25 +1,9 @@
-/* eslint-disable camelcase */
-/*
- * @copyright Copyright (c) 2022 Vinicius Reis <vinicius@nextcloud.com>
- *
- * @author Vinicius Reis <vinicius@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
+/* eslint-disable camelcase */
 
 import MDI_AlphabeticalVariant from 'vue-material-design-icons/AlphabeticalVariant.vue'
 import MDI_Close from 'vue-material-design-icons/Close.vue'
@@ -51,13 +35,13 @@ import MDI_FormatStrikethrough from 'vue-material-design-icons/FormatStrikethrou
 import MDI_FormatUnderline from 'vue-material-design-icons/FormatUnderline.vue'
 import MDI_Help from 'vue-material-design-icons/HelpCircle.vue'
 import MDI_Image from 'vue-material-design-icons/ImageOutline.vue'
-import MDI_Images from 'vue-material-design-icons/ImageMultipleOutline.vue'
 import MDI_Info from 'vue-material-design-icons/Information.vue'
 import MDI_Link from 'vue-material-design-icons/Link.vue'
 import MDI_LinkOff from 'vue-material-design-icons/LinkOff.vue'
 import MDI_LinkVariantPlus from 'vue-material-design-icons/LinkVariantPlus.vue'
 import MDI_Loading from 'vue-material-design-icons/Loading.vue'
 import MDI_Lock from 'vue-material-design-icons/Lock.vue'
+import MDI_Paperclip from 'vue-material-design-icons/Paperclip.vue'
 import MDI_Positive from 'vue-material-design-icons/CheckboxMarkedCircle.vue'
 import MDI_Redo from 'vue-material-design-icons/ArrowURightTop.vue'
 import MDI_Shape from 'vue-material-design-icons/Shape.vue'
@@ -129,12 +113,12 @@ export const FormatStrikethrough = makeIcon(MDI_FormatStrikethrough)
 export const FormatUnderline = makeIcon(MDI_FormatUnderline)
 export const Help = makeIcon(MDI_Help)
 export const Image = makeIcon(MDI_Image)
-export const Images = makeIcon(MDI_Images)
 export const Info = makeIcon(MDI_Info)
 export const LinkIcon = makeIcon(MDI_Link)
 export const LinkOff = makeIcon(MDI_LinkOff)
 export const LinkVariantPlus = makeIcon(MDI_LinkVariantPlus)
 export const Lock = makeIcon(MDI_Lock)
+export const Paperclip = makeIcon(MDI_Paperclip)
 export const Positive = makeIcon(MDI_Positive)
 export const Redo = makeIcon(MDI_Redo)
 export const Shape = makeIcon(MDI_Shape)

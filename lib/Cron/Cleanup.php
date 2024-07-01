@@ -3,25 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 
@@ -56,10 +39,8 @@ class Cleanup extends TimedJob {
 	 */
 	protected function run($argument): void {
 		$this->logger->debug('Run cleanup job for text documents');
-		$documents = $this->documentService->getAll();
-		foreach ($documents as $document) {
-			$allSessions = $this->sessionService->getAllSessions($document->getId());
-			if (count($allSessions) > 0) {
+		foreach ($this->documentService->getAll() as $document) {
+			if ($this->sessionService->countAllSessions($document->getId()) > 0) {
 				// Do not reset if there are any sessions left
 				// Inactive sessions will get removed further down and will trigger a reset next time
 				continue;
@@ -74,5 +55,8 @@ class Cleanup extends TimedJob {
 		$this->logger->debug('Run cleanup job for text sessions');
 		$removedSessions = $this->sessionService->removeInactiveSessionsWithoutSteps(null);
 		$this->logger->debug('Removed ' . $removedSessions . ' inactive sessions');
+
+		$this->logger->debug('Run cleanup job for obsolete documents folders');
+		$this->documentService->cleanupOldDocumentsFolders();
 	}
 }

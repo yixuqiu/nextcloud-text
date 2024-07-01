@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2020-2024 Nextcloud GmbH and Nextcloud contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 name: Cypress
 
 on: pull_request
@@ -88,6 +91,7 @@ jobs:
 
   cypress:
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     needs: init
 
     strategy:

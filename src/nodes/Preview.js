@@ -1,23 +1,6 @@
 /**
- * @copyright Copyright (c) 2024 Max <max@nextcloud.com>
- *
- * @author Max <max@nextcloud.com>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 import { Node, isNodeActive, getNodeType } from '@tiptap/core'
@@ -79,6 +62,7 @@ export default Node.create({
 		state.write('[')
 		state.text(node.textContent, false)
 		state.write(`](${node.attrs.href} (${node.attrs.title}))`)
+		state.closeBlock(node)
 	},
 
 	addCommands() {
@@ -101,13 +85,32 @@ export default Node.create({
 			 *
 			 */
 			unsetPreview: () => ({ state, chain }) => {
-				console.info(this.attributes)
 				return isActive(this.name, this.attributes, state)
 					&& chain()
 						.setNode('paragraph')
 						.run()
 			},
 
+			/**
+			 * Insert a preview for given link.
+			 *
+			 */
+			insertPreview: (link) => ({ state, chain }) => {
+				return chain()
+					.insertContent({
+						type: 'preview',
+						attrs: { href: link, title: 'preview' },
+						content: [{
+							type: 'text',
+							marks: [{
+								type: 'link',
+								attrs: { href: link },
+							}],
+							text: link,
+						}],
+					})
+					.run()
+			},
 		}
 	},
 })

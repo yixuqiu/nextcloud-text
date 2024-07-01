@@ -1,32 +1,19 @@
-/* eslint-disable no-unused-expressions */
 /**
- * @copyright Copyright (c) 2024 Max <max@nextcloud.com>
- *
- * @author Max <max@nextcloud.com>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
+/* eslint-disable no-unused-expressions */
 
 import Markdown from './../../../src/extensions/Markdown.js'
 import Preview from './../../../src/nodes/Preview.js'
 import { Italic, Link } from './../../../src/marks/index.js'
 import { createCustomEditor } from './../../support/components.js'
-import testData from '../../fixtures/Preview.md'
 import { loadMarkdown, runCommands, expectMarkdown } from './helpers.js'
+
+// https://github.com/import-js/eslint-plugin-import/issues/1739
+/* eslint-disable-next-line import/no-unresolved */
+import testData from '../../fixtures/Preview.md?raw'
 
 describe('Preview extension', { retries: 0 }, () => {
 
@@ -138,6 +125,21 @@ describe('Preview extension', { retries: 0 }, () => {
 			editor.commands.setPreview()
 			editor.commands.unsetPreview()
 			expect(getMark().attrs.href).to.equal('https://nextcloud.com')
+		})
+
+	})
+
+	describe('insertPreview command', { retries: 0 }, () => {
+
+		it('is available in commands', () => {
+			expect(editor.commands).to.have.property('insertPreview')
+		})
+
+		it('inserts a preview', () => {
+			editor.commands.clearContent()
+			editor.commands.insertPreview('https://nextcloud.com')
+			editor.commands.setTextSelection(1)
+			expectPreview()
 		})
 
 	})

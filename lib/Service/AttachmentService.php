@@ -3,25 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2021 Julien Veyssier <eneiluj@posteo.net>
- *
- * @author Julien Veyssier <eneiluj@posteo.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text\Service;
@@ -431,9 +414,8 @@ class AttachmentService {
 		}
 		$ownerId = $owner->getUID();
 		$ownerUserFolder = $this->rootFolder->getUserFolder($ownerId);
-		$ownerTextFile = $ownerUserFolder->getById($textFile->getId());
-		if (count($ownerTextFile) > 0) {
-			$ownerTextFile = $ownerTextFile[0];
+		$ownerTextFile = $ownerUserFolder->getFirstNodeById($textFile->getId());
+		if ($ownerTextFile !== null) {
 			$ownerParentFolder = $ownerTextFile->getParent();
 			$attachmentFolderName = '.attachments.' . $textFile->getId();
 			if ($ownerParentFolder->nodeExists($attachmentFolderName)) {
@@ -498,8 +480,7 @@ class AttachmentService {
 	 */
 	private function getTextFile(int $documentId, string $userId): File {
 		$userFolder = $this->rootFolder->getUserFolder($userId);
-		$files = $userFolder->getById($documentId);
-		$file = array_shift($files);
+		$file = $userFolder->getFirstNodeById($documentId);
 		if ($file instanceof File && !$this->isDownloadDisabled($file)) {
 			return $file;
 		}
@@ -529,8 +510,7 @@ class AttachmentService {
 				} elseif ($documentId !== null && $share->getNodeType() === 'folder') {
 					$folder = $share->getNode();
 					if ($folder instanceof Folder) {
-						$textFile = $folder->getById($documentId);
-						$textFile = array_shift($textFile);
+						$textFile = $folder->getFirstNodeById($documentId);
 						if ($textFile instanceof File && !$this->isDownloadDisabled($textFile)) {
 							return $textFile;
 						}
@@ -556,9 +536,8 @@ class AttachmentService {
 	 * @throws NoUserException
 	 */
 	public function cleanupAttachments(int $fileId): int {
-		$textFile = $this->rootFolder->getById($fileId);
-		if (count($textFile) > 0 && $textFile[0] instanceof File) {
-			$textFile = $textFile[0];
+		$textFile = $this->rootFolder->getFirstNodeById($fileId);
+		if ($textFile instanceof File) {
 			if ($textFile->getMimeType() === 'text/markdown') {
 				// get IDs of the files inside the attachment dir
 				try {

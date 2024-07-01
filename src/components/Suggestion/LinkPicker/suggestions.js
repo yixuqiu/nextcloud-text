@@ -1,22 +1,6 @@
-/*
- * @copyright Copyright (c) 2022 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 import createSuggestions from '../suggestions.js'
@@ -93,16 +77,22 @@ export default () => createSuggestions({
 		}
 		getLinkWithPicker(props.providerId, true)
 			.then(link => {
-				let content = link
-
-				if (hasMarkdownSyntax(content) && isValidMarkdown(content)) {
-					content = markdownit.render(content)
+				if (hasMarkdownSyntax(link) && isValidMarkdown(link)) {
+					// Insert markdown content (e.g. from `text_templates` app)
+					const content = markdownit.render(link)
+					editor
+						.chain()
+						.focus()
+						.insertContentAt(range, content + ' ')
+						.run()
+					return
 				}
 
 				editor
 					.chain()
 					.focus()
-					.insertContentAt(range, content + ' ')
+					.deleteRange(range)
+					.insertPreview(link)
 					.run()
 			})
 			.catch(error => {

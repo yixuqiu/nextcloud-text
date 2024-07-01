@@ -1,3 +1,8 @@
+<!--
+  - SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 <template>
 	<div :key="key" class="link-view-bubble">
 		<!-- link header with buttons -->
@@ -223,7 +228,12 @@ export default {
 		},
 
 		removeLink() {
-			this.editor.chain().unsetLink().focus().run()
+			this.editor.chain()
+				// Explicitly hide bubble to prevent flickering before it's removed
+				.hideLinkBubble()
+				.unsetLink()
+				.focus()
+				.run()
 			this.stopEdit()
 		},
 	},

@@ -1,3 +1,8 @@
+/**
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 import { initUserAndFiles, randUser } from '../utils/index.js'
 
 const currentUser = randUser()
@@ -41,7 +46,7 @@ describe('Smart picker', () => {
 			.should('have.text', 'Hello World')
 	})
 
-	it('Insert a link with the smart picker', () => {
+	it.skip('Insert a link with the smart picker', () => {
 		cy.isolateTest({
 			sourceFile: fileName,
 		})

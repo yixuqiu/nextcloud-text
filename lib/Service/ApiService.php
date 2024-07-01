@@ -3,25 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text\Service;
@@ -49,26 +32,16 @@ use OCP\Share\IShare;
 use Psr\Log\LoggerInterface;
 
 class ApiService {
-	private IRequest $request;
-	private SessionService $sessionService;
-	private DocumentService $documentService;
-	private LoggerInterface $logger;
-	private EncodingService $encodingService;
-	private IL10N $l10n;
 
-	public function __construct(IRequest $request,
-		SessionService $sessionService,
-		DocumentService $documentService,
-		EncodingService $encodingService,
-		LoggerInterface $logger,
-		IL10N $l10n
+	public function __construct(
+		private IRequest $request,
+		private SessionService $sessionService,
+		private DocumentService $documentService,
+		private EncodingService $encodingService,
+		private LoggerInterface $logger,
+		private IL10N $l10n,
+		private ?string $userId,
 	) {
-		$this->request = $request;
-		$this->sessionService = $sessionService;
-		$this->documentService = $documentService;
-		$this->logger = $logger;
-		$this->encodingService = $encodingService;
-		$this->l10n = $l10n;
 	}
 
 	public function create(?int $fileId = null, ?string $filePath = null, ?string $baseVersionEtag = null, ?string $token = null, ?string $guestName = null): DataResponse {
@@ -89,7 +62,7 @@ class ApiService {
 				}
 			} elseif ($fileId !== null) {
 				try {
-					$file = $this->documentService->getFileById($fileId);
+					$file = $this->documentService->getFileById($fileId, $this->userId);
 				} catch (NotFoundException|NotPermittedException $e) {
 					$this->logger->error('No permission to access this file', [ 'exception' => $e ]);
 					return new DataResponse(['error' => $this->l10n->t('No permission to access this file.')], Http::STATUS_NOT_FOUND);
@@ -164,9 +137,11 @@ class ApiService {
 			$lockInfo = null;
 		}
 
-		$isLocked = $this->documentService->lock($file->getId());
-		if (!$isLocked) {
-			$readOnly = true;
+		if (!$readOnly) {
+			$isLocked = $this->documentService->lock($file->getId());
+			if (!$isLocked) {
+				$readOnly = true;
+			}
 		}
 
 		return new DataResponse([
