@@ -2,43 +2,35 @@
 
 declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text\Controller;
 
+use OCA\Text\Context\ContextManager;
+use OCA\Text\Exception\InvalidSessionException;
 use OCA\Text\Middleware\Attribute\RequireDocumentBaseVersionEtag;
 use OCA\Text\Middleware\Attribute\RequireDocumentSession;
 use OCA\Text\Service\ApiService;
+use OCA\Text\Service\FileService;
 use OCA\Text\Service\NotificationService;
 use OCA\Text\Service\SessionService;
 use OCP\AppFramework\ApiController;
+use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\DataResponse;
+use OCP\Files\NotFoundException;
+use OCP\Files\NotPermittedException;
+use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserManager;
 use OCP\IUserSession;
+use Psr\Log\LoggerInterface;
 
 class SessionController extends ApiController implements ISessionAwareController {
 	use TSessionAwareController;
@@ -50,32 +42,56 @@ class SessionController extends ApiController implements ISessionAwareController
 		string $appName,
 		IRequest $request,
 		private ApiService $apiService,
+		private ContextManager $contextManager,
+		private FileService $fileService,
 		private SessionService $sessionService,
 		private NotificationService $notificationService,
 		private IUserManager $userManager,
-		private IUserSession $userSession) {
+		private IUserSession $userSession,
+		private LoggerInterface $logger,
+		private IL10N $l10n,
+	) {
 		parent::__construct($appName, $request);
 	}
 
 	#[NoAdminRequired]
-	public function create(?int $fileId = null, ?string $file = null, ?string $baseVersionEtag = null): DataResponse {
-		return $this->apiService->create($fileId, $file, $baseVersionEtag);
+	public function create(string $type, int $id, ?string $baseVersionEtag = null): DataResponse {
+		try {
+			$user = $this->userSession->getUser();
+			if ($user === null) {
+				throw new NotFoundException('No user found.');
+			}
+			$context = $this->contextManager->getContext($type, $id, $user);
+		} catch (NotFoundException|NotPermittedException $e) {
+			$this->logger->error('No context for ' . $type . ' (' . $id . ') ', [ 'exception' => $e ]);
+			return new DataResponse([
+				'error' => $this->l10n->t('File not found')
+			], Http::STATUS_NOT_FOUND);
+		}
+
+		return $this->apiService->create($context, $baseVersionEtag);
 	}
 
 	#[NoAdminRequired]
 	#[PublicPage]
-	public function close(int $documentId, int $sessionId, string $sessionToken): DataResponse {
-		return $this->apiService->close($documentId, $sessionId, $sessionToken);
+	public function close(string $documentId, int $sessionId, string $sessionToken): DataResponse {
+		// We also want this to work with a session that has already been closed.
+		// So we cannot rely on RequireDocumentSession to retrieve the user.
+		$user = $this->userSession->getUser() ?? $this->getSessionUser($documentId, $sessionId, $sessionToken);
+		if ($user === null) {
+			throw new InvalidSessionException();
+		}
+		return $this->apiService->close($documentId, $sessionId, $sessionToken, $user);
 	}
 
 	#[NoAdminRequired]
 	#[PublicPage]
 	#[RequireDocumentBaseVersionEtag]
 	#[RequireDocumentSession]
-	public function push(int $version, array $steps, string $awareness): DataResponse {
+	public function push(int $version, array $steps, string $awareness, ?int $recoveryAttempt = null): DataResponse {
 		try {
 			$this->loginSessionUser();
-			return $this->apiService->push($this->getSession(), $this->getDocument(), $version, $steps, $awareness);
+			return $this->apiService->push($this->getSession(), $this->getDocument(), $version, $steps, $awareness, $recoveryAttempt, $this->getUser());
 		} finally {
 			$this->restoreSessionUser();
 		}
@@ -88,7 +104,7 @@ class SessionController extends ApiController implements ISessionAwareController
 	public function sync(int $version = 0): DataResponse {
 		try {
 			$this->loginSessionUser();
-			return $this->apiService->sync($this->getSession(), $this->getDocument(), $version);
+			return $this->apiService->sync($this->getDocument(), $this->getUser(), $version);
 		} finally {
 			$this->restoreSessionUser();
 		}
@@ -98,10 +114,10 @@ class SessionController extends ApiController implements ISessionAwareController
 	#[PublicPage]
 	#[RequireDocumentBaseVersionEtag]
 	#[RequireDocumentSession]
-	public function save(int $version = 0, ?string $autosaveContent = null, ?string $documentState = null, bool $force = false, bool $manualSave = false): DataResponse {
+	public function save(int $version, string $autosaveContent, string $documentState, bool $force = false, bool $manualSave = false): DataResponse {
 		try {
 			$this->loginSessionUser();
-			return $this->apiService->save($this->getSession(), $this->getDocument(), $version, $autosaveContent, $documentState, $force, $manualSave);
+			return $this->apiService->save($this->getDocument(), $this->getUser(), $version, $autosaveContent, $documentState, $force, $manualSave);
 		} finally {
 			$this->restoreSessionUser();
 		}
@@ -111,12 +127,23 @@ class SessionController extends ApiController implements ISessionAwareController
 	#[PublicPage]
 	#[RequireDocumentSession]
 	#[UserRateLimit(limit: 5, period: 120)]
+	#[AnonRateLimit(limit: 5, period: 120)]
 	public function mention(string $mention): DataResponse {
-		if ($this->getSession()->isGuest() && !$this->sessionService->isUserInDocument($this->getDocument()->getId(), $mention)) {
+		if ($this->getSession()->isGuest() && !$this->sessionService->isUserInDocument($this->getDocumentId(), $mention)) {
 			return new DataResponse([], 403);
 		}
 
-		return new DataResponse($this->notificationService->mention($this->getDocument()->getId(), $mention));
+		$document = $this->getDocument();
+		if ($document->getContextType() !== 'file') {
+			return new DataResponse(false);
+		}
+
+		$session = $this->getSession();
+		return new DataResponse($this->notificationService->mention(
+			$document->getContextId(),
+			$mention,
+			$session->isGuest() ? ($session->getGuestName() ?? '') : null,
+		));
 	}
 
 	private function loginSessionUser(): void {
@@ -135,5 +162,15 @@ class SessionController extends ApiController implements ISessionAwareController
 		if ($this->restoreUser) {
 			$this->userSession->setUser($this->userToRestore);
 		}
+	}
+
+	private function getSessionUser(string $documentId, int $sessionId, string $sessionToken): ?IUser {
+		$session = $this->sessionService->getSession($documentId, $sessionId, $sessionToken);
+		if ($session === null || $session->isGuest()) {
+			return null;
+		}
+
+		$user = $this->userManager->get($session->getUserId());
+		return $user?->isEnabled() ? $user : null;
 	}
 }

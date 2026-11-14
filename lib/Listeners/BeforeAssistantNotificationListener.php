@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Text\Listeners;
 
 use OCA\Text\AppInfo\Application;
@@ -12,7 +17,7 @@ use OCP\IURLGenerator;
 class BeforeAssistantNotificationListener implements \OCP\EventDispatcher\IEventListener {
 
 	public function __construct(
-		private IURLGenerator $urlGenerator,
+		private readonly IURLGenerator $urlGenerator,
 	) {
 	}
 

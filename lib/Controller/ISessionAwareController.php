@@ -1,15 +1,23 @@
 <?php
 
+/**
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Text\Controller;
 
 use OCA\Text\Db\Document;
 use OCA\Text\Db\Session;
+use OCP\IUser;
 
 interface ISessionAwareController {
 	public function getSession(): Session;
 	public function setSession(Session $session): void;
+	public function getDocumentId(): string;
+	public function setDocumentId(string $documentId): void;
 	public function getDocument(): Document;
 	public function setDocument(Document $document): void;
-	public function getUserId(): string;
-	public function setUserId(string $userId): void;
+	public function getUser(): IUser;
+	public function setUser(IUser $user): void;
 }

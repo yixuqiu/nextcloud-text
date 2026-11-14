@@ -1,3 +1,8 @@
+<!--
+  - SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 <template>
 	<div :key="key" class="link-view-bubble">
 		<!-- link header with buttons -->
@@ -5,128 +10,152 @@
 			<div class="link-view-bubble__title">
 				{{ title }}
 			</div>
-			<!-- copy link -->
-			<NcButton :title="copyLinkTooltip"
-				:aria-label="copyLinkTooltip"
-				type="tertiary"
-				@click="copyLink">
+			<!-- open link -->
+			<NcButton
+				:disabled="!isSafeHref"
+				:title="openLinkTitle"
+				:aria-label="openLinkTitle"
+				variant="tertiary"
+				@click="openLink(href)">
 				<template #icon>
-					<CheckIcon v-if="copySuccess" :size="20" />
-					<NcLoadingIcon v-else-if="copyLoading" :size="20" />
-					<ContentCopyIcon v-else :size="20" />
+					<OpenInNewIcon :size="20" />
 				</template>
 			</NcButton>
 
 			<!-- edit/save -->
 			<div v-if="isEditable" class="edit-buttons">
-				<NcButton v-if="!edit"
+				<NcButton
+					v-if="!edit"
 					:title="t('text', 'Edit link')"
 					:aria-label="t('text', 'Edit link')"
-					type="tertiary"
+					variant="tertiary"
 					@click="startEdit">
 					<template #icon>
-						<PencilIcon :size="20" />
+						<PencilOutlineIcon :size="20" />
 					</template>
 				</NcButton>
-				<NcButton v-else
+				<NcButton
+					v-else
 					:title="t('text', 'Save changes')"
 					:aria-label="t('text', 'Save changes')"
-					type="tertiary"
+					variant="tertiary"
 					@click="updateLink">
 					<template #icon>
 						<CheckIcon :size="20" />
 					</template>
 				</NcButton>
-
-				<!-- remove link / dismiss changes -->
-				<NcButton v-if="!edit"
-					:title="t('text', 'Remove link')"
-					:aria-label="t('text', 'Remove link')"
-					type="tertiary"
-					@click="removeLink">
-					<template #icon>
-						<LinkOffIcon :size="20" />
-					</template>
-				</NcButton>
-				<NcButton v-else
-					:title="t('text', 'Cancel')"
-					:aria-label="t('text', 'Cancel')"
-					type="tertiary"
-					@click="stopEdit">
-					<template #icon>
-						<CloseIcon :size="20" />
-					</template>
-				</NcButton>
 			</div>
+
+			<!-- preview options / dismiss changes -->
+			<PreviewOptions
+				v-if="isEditable && !edit"
+				:href="href"
+				type="text-only"
+				@toggle="setPreview"
+				@delete="removeLink" />
+			<NcButton
+				v-else-if="isEditable"
+				:title="t('text', 'Cancel')"
+				:aria-label="t('text', 'Cancel')"
+				variant="tertiary"
+				@click="stopEdit">
+				<template #icon>
+					<CloseIcon :size="20" />
+				</template>
+			</NcButton>
 		</div>
 
 		<!-- link edit form -->
 		<div v-if="isEditable && edit" class="link-view-bubble__edit">
-			<NcTextField name="newHref"
+			<NcTextField
+				v-model="newText"
+				name="newText"
+				:label="t('text', 'Link text')"
+				@keyup.enter.prevent="updateLink" />
+			<NcTextField
+				ref="hrefField"
+				v-model="newHref"
+				name="newHref"
 				:label="t('text', 'URL')"
-				:value.sync="newHref"
-				@keypress.enter.prevent="updateLink" />
+				@keyup.enter.prevent="updateLink" />
 		</div>
 
 		<!-- link preview -->
-		<NcReferenceList v-else-if="href"
+		<NcReferenceList
+			v-else-if="showPreview"
 			ref="referencelist"
 			:text="sanitizedHref"
 			:limit="1"
 			:interactive="false"
-			:display-fallback="true"
+			displayFallback
 			class="link-view-bubble__reference-list"
 			@loaded="onReferenceListLoaded" />
 	</div>
 </template>
 
 <script>
-import { NcButton, NcLoadingIcon, NcTextField } from '@nextcloud/vue'
-import { NcReferenceList } from '@nextcloud/vue/dist/Components/NcRichText.js'
-import { translate as t } from '@nextcloud/l10n'
+import { t } from '@nextcloud/l10n'
+import { getMarkRange } from '@tiptap/core'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import { NcReferenceList } from '@nextcloud/vue/components/NcRichText'
+import NcTextField from '@nextcloud/vue/components/NcTextField'
 import CheckIcon from 'vue-material-design-icons/Check.vue'
 import CloseIcon from 'vue-material-design-icons/Close.vue'
-import ContentCopyIcon from 'vue-material-design-icons/ContentCopy.vue'
-import LinkOffIcon from 'vue-material-design-icons/LinkOff.vue'
-import PencilIcon from 'vue-material-design-icons/Pencil.vue'
+import OpenInNewIcon from 'vue-material-design-icons/OpenInNew.vue'
+import PencilOutlineIcon from 'vue-material-design-icons/PencilOutline.vue'
+import PreviewOptions from '../Editor/PreviewOptions.vue'
+import { useOpenLinkHandler } from '../../composables/useOpenLinkHandler.ts'
+import * as Link from '../../marks/Link.ts'
 
-import CopyToClipboardMixin from '../../mixins/CopyToClipboardMixin.js'
+const PROTOCOLS_WITH_PREVIEW = ['http:', 'https:']
 
 export default {
 	name: 'LinkBubbleView',
 
 	components: {
+		PreviewOptions,
 		CheckIcon,
 		CloseIcon,
-		ContentCopyIcon,
 		NcButton,
-		NcLoadingIcon,
 		NcReferenceList,
 		NcTextField,
-		LinkOffIcon,
-		PencilIcon,
+		OpenInNewIcon,
+		PencilOutlineIcon,
 	},
-
-	mixins: [
-		CopyToClipboardMixin,
-	],
 
 	props: {
 		editor: {
 			type: Object,
 			required: true,
 		},
+
 		href: {
 			type: String,
 			default: null,
 		},
+
+		nodeStart: {
+			type: Number,
+			default: null,
+		},
+
+		focusInput: {
+			type: Boolean,
+			default: false,
+		},
+	},
+
+	setup() {
+		const { openLinkHandler } = useOpenLinkHandler()
+		return { openLinkHandler }
 	},
 
 	data() {
 		return {
 			isEditable: false,
-			edit: false,
-			newHref: null,
+			edit: true,
+			newText: '',
+			newHref: '',
 			referenceTitle: null,
 		}
 	},
@@ -136,96 +165,201 @@ export default {
 			return this.href || 'no-href'
 		},
 
-		copyLinkTooltip() {
-			if (this.copied) {
-				if (this.copySuccess) {
-					return ''
-				}
-				return t('text', 'Cannot copy, please copy the link manually')
-			}
-			return t('text', 'Copy link to clipboard')
-		},
-
 		/**
 		 * NcReferenceList only accepts full URLs with origin.
 		 */
 		sanitizedHref() {
-			const url = new URL(this.href, window.location)
-			return url.href
+			try {
+				const url = new URL(this.href, window.location)
+				return url.href
+			} catch {
+				return this.href
+			}
 		},
 
 		title() {
 			return this.referenceTitle ? this.referenceTitle : this.sanitizedHref
+		},
+
+		showPreview() {
+			try {
+				const url = new URL(this.href, window.location)
+				return this.href && PROTOCOLS_WITH_PREVIEW.includes(url.protocol)
+			} catch {
+				return false
+			}
+		},
+
+		isSafeHref() {
+			try {
+				const url = new URL(this.href, window.location)
+				return !!this.href && Link.PROTOCOLS_TO_LINK_TO.includes(url.protocol)
+			} catch {
+				return false
+			}
+		},
+
+		openLinkTitle() {
+			if (this.isSafeHref) {
+				return t('text', 'Open link')
+			}
+
+			if (!this.href) {
+				return t('text', 'No link available to open')
+			}
+
+			return t('text', 'Cannot open links with unsafe protocols')
 		},
 	},
 
 	watch: {
 		key() {
 			this.resetBubble()
+			this.startEditIfEmpty()
+		},
+
+		focusInput(value) {
+			if (value && this.isEditable) {
+				this.startEdit()
+			}
 		},
 	},
 
 	beforeMount() {
 		this.isEditable = this.editor.isEditable
-		this.editor.on('update', ({ editor }) => {
-			this.isEditable = editor.isEditable
-		})
+		this.editor.on('update', this.onUpdate)
+	},
+
+	beforeUnmount() {
+		this.editor.off('update', this.onUpdate)
 	},
 
 	methods: {
-		t,
+		onUpdate({ editor }) {
+			this.isEditable = editor.isEditable
+		},
 
 		resetBubble() {
 			this.edit = false
-			this.newHref = null
+			this.newText = ''
+			this.newHref = ''
 			this.referenceTitle = null
 		},
 
-		async copyLink() {
-			await this.copyToClipboard(this.href)
+		openLink(href) {
+			this.openLinkHandler.openLink(href)
+		},
+
+		linkRange() {
+			if (this.nodeStart === null) {
+				return null
+			}
+			const { doc, schema } = this.editor.state
+			try {
+				return getMarkRange(doc.resolve(this.nodeStart), schema.marks.link) ?? null
+			} catch {
+				return null
+			}
+		},
+
+		linkText() {
+			const range = this.linkRange()
+			return range
+				? this.editor.state.doc.textBetween(range.from, range.to)
+				: ''
+		},
+
+		/**
+		 * Command chain with the active link selected, so commands apply to it
+		 */
+		chainOnLink() {
+			const chain = this.editor.chain()
+			const range = this.linkRange()
+			return range ? chain.setTextSelection(range) : chain
 		},
 
 		onReferenceListLoaded() {
-			this.referenceTitle = this.$refs.referencelist.firstReference?.openGraphObject?.name ?? null
+			this.referenceTitle
+				= this.$refs.referencelist.firstReference?.openGraphObject?.name
+					?? null
+		},
+
+		setPreview() {
+			this.chainOnLink()
+				.hideLinkBubble()
+				.setPreview()
+				.run()
 		},
 
 		startEdit() {
 			this.edit = true
-			this.newHref = this.href
+			this.newText = this.linkText()
+			this.newHref = this.href ?? ''
+			this.$nextTick(() => {
+				this.$refs.hrefField.focus()
+			})
+		},
+
+		startEditIfEmpty() {
+			if (this.isEditable && !this.href) {
+				this.startEdit()
+			}
 		},
 
 		stopEdit() {
 			this.edit = false
-			this.newHref = null
+			this.newText = ''
+			this.newHref = ''
 		},
 
 		updateLink() {
-			if (this.href !== this.newHref) {
-				this.setLinkUrl(this.newHref)
+			const text = this.newText === '' || this.newText === this.linkText()
+				? null
+				: this.newText
+			if (text !== null || this.href !== this.newHref) {
+				this.setLinkContent(this.newHref, text)
 			}
 			this.stopEdit()
 		},
 
-		setLinkUrl(href) {
+		setLinkContent(href, text) {
+			const range = this.linkRange()
 			// Store current selection to restore it after setLink
-			const selection = { ...this.editor.view.state.selection }
-			const { ranges } = selection
-			const from = Math.min(...ranges.map(range => range.$from.pos))
-			const to = Math.max(...ranges.map(range => range.$to.pos))
+			const { ranges } = this.editor.view.state.selection
+			const from = Math.min(...ranges.map((range) => range.$from.pos))
+			const to = Math.max(...ranges.map((range) => range.$to.pos))
 
-			console.debug('selection', selection)
-			this.editor.chain()
-				.extendMarkRange('link')
-				.setLink({ href })
-				.setTextSelection({ from, to })
-				.focus()
-				.run()
+			const chain = this.chainOnLink()
+			if (text !== null && range) {
+				const end = range.from + text.length
+				chain
+					.command(({ tr }) => {
+						tr.insertText(text, range.from, range.to)
+						return true
+					})
+					.setTextSelection({ from: range.from, to: end })
+					.setLink({ href })
+					.setTextSelection(end)
+			} else {
+				chain
+					.extendMarkRange('link')
+					.setLink({ href })
+					.setTextSelection({ from, to })
+			}
+			chain.focus().run()
 		},
 
 		removeLink() {
-			this.editor.chain().unsetLink().focus().run()
+			this.chainOnLink()
+				// Explicitly hide bubble to prevent flickering before it's removed
+				.hideLinkBubble()
+				.unsetLink()
+				.focus()
+				.run()
 			this.stopEdit()
 		},
+
+		t,
 	},
 }
 </script>

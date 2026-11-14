@@ -1,30 +1,18 @@
 /**
- * @copyright Copyright (c) 2020 Azul <azul@riseup.net>
- *
- * @author Azul <azul@riseup.net>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 import { loadState } from '@nextcloud/initial-state'
 import { generateUrl } from '@nextcloud/router'
 
-const domHref = function(node, relativePath) {
-	const ref = node.attrs.href
+/**
+ * Href to be used in the dom
+ *
+ * @param {import('@tiptap/pm/model').Mark} mark to compute href for
+ */
+function domHref(mark) {
+	const ref = mark.attrs.href
 	if (!ref) {
 		return ref
 	}
@@ -50,12 +38,16 @@ const domHref = function(node, relativePath) {
 	const match = ref.match(/^([^?]*)\?fileId=(\d+)/)
 	if (match) {
 		const [, , id] = match
-		return (new URL(generateUrl(`/f/${id}`), window.origin)).href
+		return new URL(generateUrl(`/f/${id}`), window.origin).href
 	}
 	return ref
 }
 
-const parseHref = function(dom) {
+/**
+ *
+ * @param {Element} dom element to parse
+ */
+function parseHref(dom) {
 	const ref = dom.getAttribute('href')
 	if (!ref) {
 		return ref
@@ -63,18 +55,29 @@ const parseHref = function(dom) {
 	const match = ref.match(/\?dir=([^&]*)&openfile=([^&]*)#relPath=([^&]*)/)
 	if (match) {
 		const [, , id] = match
-		return (new URL(generateUrl(`/f/${id}`), window.origin)).href
+		return new URL(generateUrl(`/f/${id}`), window.origin).href
 	}
 	return ref
 }
 
-const isLinkToSelfWithHash = function(href) {
-	const locationNoHash = window.location.origin + window.location.pathname + window.location.search
+/**
+ *
+ * @param {string} href url to check
+ */
+function isLinkToSelfWithHash(href) {
+	const locationNoHash
+		= window.location.origin + window.location.pathname + window.location.search
 	return href?.startsWith('#') || href?.startsWith(locationNoHash + '#')
 }
 
-export {
-	domHref,
-	parseHref,
-	isLinkToSelfWithHash,
+/**
+ * Open links, to be used as custom click handler
+ *
+ * @param {string} href the link href
+ */
+function openLink(href) {
+	const linkUrl = new URL(href, window.location.href)
+	window.open(linkUrl.href, '_blank')
 }
+
+export { domHref, isLinkToSelfWithHash, openLink, parseHref }

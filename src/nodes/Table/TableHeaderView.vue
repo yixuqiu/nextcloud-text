@@ -1,86 +1,99 @@
 <!--
-  - @copyright Copyright (c) 2022 Max <max@nextcloud.com>
-  -
-  - @author Max <max@nextcloud.com>
-  - @author Grigorii K. Shartsev <me@shgk.me>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -
-  -->
+	- SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+	- SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
-	<NodeViewWrapper data-text-el="table-header" as="th" :style="textAlign">
+	<NodeViewWrapper
+		data-text-el="table-header"
+		as="th"
+		:dir="dir"
+		:style="align">
 		<div>
 			<NodeViewContent class="content" />
-			<NcActions v-if="editor.isEditable"
+			<NcActions
+				v-if="isEditable"
 				ref="menu"
+				size="small"
+				variant="tertiary-no-background"
 				data-text-table-actions="header">
 				<NcActionButtonGroup>
-					<NcActionButton data-text-table-action="align-column-left"
+					<NcActionButton
+						data-text-table-action="align-column-left"
 						:aria-label="t('text', 'Left align column')"
 						type="radio"
 						value="left"
-						:model-value="node.attrs.textAlign"
-						@click="alignLeft">
+						:modelValue="node.attrs.align"
+						@click="setAlignLeft">
 						<template #icon>
 							<AlignHorizontalLeft />
 						</template>
 					</NcActionButton>
-					<NcActionButton data-text-table-action="align-column-center"
+					<NcActionButton
+						data-text-table-action="align-column-center"
 						:aria-label="t('text', 'Center align column')"
 						type="radio"
 						value="center"
-						:model-value="node.attrs.textAlign"
-						@click="alignCenter">
+						:modelValue="node.attrs.align"
+						@click="setAlignCenter">
 						<template #icon>
 							<AlignHorizontalCenter />
 						</template>
 					</NcActionButton>
-					<NcActionButton data-text-table-action="align-column-right"
+					<NcActionButton
+						data-text-table-action="align-column-right"
 						:aria-label="t('text', 'Right align column')"
 						type="radio"
 						value="right"
-						:model-value="node.attrs.textAlign"
-						@click="alignRight">
+						:modelValue="node.attrs.align"
+						@click="setAlignRight">
 						<template #icon>
 							<AlignHorizontalRight />
 						</template>
 					</NcActionButton>
 				</NcActionButtonGroup>
-				<NcActionButton data-text-table-action="add-column-before"
-					close-after-click
+				<NcActionButton
+					data-text-table-action="sort-column-asc"
+					closeAfterClick
+					@click="sortColumnAsc">
+					<template #icon>
+						<SortAscending />
+					</template>
+					{{ t('text', 'Sort ascending') }}
+				</NcActionButton>
+				<NcActionButton
+					data-text-table-action="sort-column-desc"
+					closeAfterClick
+					@click="sortColumnDesc">
+					<template #icon>
+						<SortDescending />
+					</template>
+					{{ t('text', 'Sort descending') }}
+				</NcActionButton>
+				<NcActionButton
+					data-text-table-action="add-column-before"
+					closeAfterClick
 					@click="addColumnBefore">
 					<template #icon>
 						<TableAddColumnBefore />
 					</template>
 					{{ t('text', 'Add column before') }}
 				</NcActionButton>
-				<NcActionButton data-text-table-action="add-column-after"
-					close-after-click
+				<NcActionButton
+					data-text-table-action="add-column-after"
+					closeAfterClick
 					@click="addColumnAfter">
 					<template #icon>
 						<TableAddColumnAfter />
 					</template>
 					{{ t('text', 'Add column after') }}
 				</NcActionButton>
-				<NcActionButton data-text-table-action="remove-column"
-					close-after-click
+				<NcActionButton
+					data-text-table-action="remove-column"
+					closeAfterClick
 					@click="deleteColumn">
 					<template #icon>
-						<Delete />
+						<TrashCan />
 					</template>
 					{{ t('text', 'Delete this column') }}
 				</NcActionButton>
@@ -90,15 +103,20 @@
 </template>
 
 <script>
-import { NodeViewWrapper, NodeViewContent } from '@tiptap/vue-2'
-import { NcActions, NcActionButton, NcActionButtonGroup } from '@nextcloud/vue'
+import { t } from '@nextcloud/l10n'
+import { NodeViewContent, nodeViewProps, NodeViewWrapper } from '@tiptap/vue-3'
+import NcActionButton from '@nextcloud/vue/components/NcActionButton'
+import NcActionButtonGroup from '@nextcloud/vue/components/NcActionButtonGroup'
+import NcActions from '@nextcloud/vue/components/NcActions'
 import {
 	AlignHorizontalCenter,
 	AlignHorizontalLeft,
 	AlignHorizontalRight,
-	Delete,
-	TableAddColumnBefore,
+	SortAscending,
+	SortDescending,
 	TableAddColumnAfter,
+	TableAddColumnBefore,
+	TrashCan,
 } from '../../components/icons.js'
 
 export default {
@@ -107,7 +125,7 @@ export default {
 		AlignHorizontalCenter,
 		AlignHorizontalLeft,
 		AlignHorizontalRight,
-		Delete,
+		TrashCan,
 		NcActionButton,
 		NcActionButtonGroup,
 		NcActions,
@@ -115,90 +133,138 @@ export default {
 		NodeViewContent,
 		TableAddColumnBefore,
 		TableAddColumnAfter,
+		SortAscending,
+		SortDescending,
 	},
-	props: {
-		editor: {
-			type: Object,
-			required: true,
-		},
-		getPos: {
-			type: Function,
-			required: true,
-		},
-		node: {
-			type: Object,
-			required: true,
-		},
+
+	props: nodeViewProps,
+
+	data() {
+		return {
+			isEditable: false,
+		}
 	},
+
 	computed: {
-		textAlign() {
-			return { 'text-align': this.node.attrs.textAlign }
+		align() {
+			return { 'text-align': this.node.attrs.align }
+		},
+
+		dir() {
+			return this.node.attrs.dir || ''
 		},
 	},
+
+	beforeMount() {
+		this.isEditable = this.editor.isEditable
+		this.editor.on('update', this.onUpdate)
+	},
+
+	beforeUnmount() {
+		this.editor.off('update', this.onUpdate)
+	},
+
 	methods: {
-		alignCenter() {
-			this.align('center')
+		onUpdate({ editor }) {
+			this.isEditable = editor.isEditable
 		},
-		alignLeft() {
-			this.align('left')
+
+		setAlignCenter() {
+			this.setAlign('center')
 		},
-		alignRight() {
-			this.align('right')
+
+		setAlignLeft() {
+			this.setAlign('left')
 		},
-		align(textAlign) {
-			this.editor.chain()
+
+		setAlignRight() {
+			this.setAlign('right')
+		},
+
+		setAlign(align) {
+			this.editor
+				.chain()
 				.focus()
 				.setTextSelection(this.getPos())
-				.setCellAttribute('textAlign', textAlign)
+				.setCellAttribute('align', align)
 				.run()
 			while (this.editor.commands.goToNextRow()) {
-				this.editor.commands.setCellAttribute('textAlign', textAlign)
+				this.editor.commands.setCellAttribute('align', align)
 			}
 			// Set focus back to first row
-			this.editor.chain()
-				.setTextSelection(this.getPos())
-				.focus()
-				.run()
+			this.editor.chain().setTextSelection(this.getPos()).focus().run()
 			this.$refs.menu.closeMenu(false)
 		},
+
 		deleteColumn() {
-			this.editor.chain()
+			this.editor
+				.chain()
 				.focus()
 				.setTextSelection(this.getPos())
 				.deleteColumn()
 				.run()
 		},
+
 		addColumnBefore() {
-			this.editor.chain()
+			this.editor
+				.chain()
 				.focus()
 				.setTextSelection(this.getPos())
 				.addColumnBefore()
 				.run()
 		},
+
 		addColumnAfter() {
-			this.editor.chain()
+			this.editor
+				.chain()
 				.focus()
 				.setTextSelection(this.getPos())
 				.addColumnAfter()
 				.run()
 		},
+
+		sortColumnAsc() {
+			this.sortColumn('asc')
+		},
+
+		sortColumnDesc() {
+			this.sortColumn('desc')
+		},
+
+		sortColumn(direction) {
+			const pos = this.getPos()
+			const cellNode = this.editor.state.doc.nodeAt(pos)
+			this.editor.commands.sortColumn(direction, cellNode)
+		},
+
+		t,
 	},
 }
 </script>
 
 <style scoped lang="scss">
+div[contenteditable='true'] th .content {
+	padding-right: 0;
+}
 th {
-
 	.content {
 		margin: 0;
-		padding-top: 0.75em;
 		flex-grow: 1;
+		padding: calc(
+				(var(--default-clickable-area) - var(--default-font-size) * 1.5) / 2
+			)
+			0.75em;
 	}
+
 	.action-item {
+		top: calc((var(--default-clickable-area) - var(--clickable-area-small)) / 2);
 		opacity: 50%;
 	}
 
-	&:hover, &:active, &:focus, &:focus-within {
+	&:hover,
+	&:active,
+	&:focus,
+	&:focus-within {
 		.action-item {
 			opacity: 100%;
 		}

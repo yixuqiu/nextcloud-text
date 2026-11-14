@@ -1,4 +1,10 @@
+/**
+ * SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 import { showError, showSuccess } from '@nextcloud/dialogs'
+import { t } from '@nextcloud/l10n'
 
 export default {
 	data() {
@@ -22,12 +28,13 @@ export default {
 
 				// Notify success
 				showSuccess(t('text', 'Copied to the clipboard'))
-			} catch (error) {
+			} catch {
 				this.copySuccess = false
 				this.copied = true
 				showError(
 					`<div>${t('text', 'Could not copy to the clipboard')}</div>`,
-					{ isHTML: true })
+					{ isHTML: true },
+				)
 			} finally {
 				this.copyLoading = false
 				setTimeout(() => {

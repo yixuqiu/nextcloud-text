@@ -1,21 +1,6 @@
 /**
- * @copyright Copyright (c) 2022
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 import { randUser } from '../../utils/index.js'
@@ -40,9 +25,7 @@ describe('Hard break support', function() {
 	it('Can create hard breaks with shift+enter', () => {
 		cy.getContent().type('Hello')
 		cy.getContent().type('{shift+enter}world')
-		cy.getContent()
-			.find('p br')
-			.should('exist')
+		cy.getContent().find('p br').should('exist')
 	})
 
 	it('Convert paragraph break into hard break', () => {
@@ -52,22 +35,17 @@ describe('Hard break support', function() {
 		cy.getContent()
 			.find('p')
 			.should('have.length', 2)
-			.and($p => {
+			.and(($p) => {
 				expect($p[0]).to.contain('Hello')
 				expect($p[1]).to.contain('world')
 			})
-		cy.getContent()
-			.type('{home}{backspace}')
-		cy.getContent()
-			.find('p br')
-			.should('exist')
+		cy.getContent().type('{home}{backspace}', { delay: 10 })
+		cy.getContent().find('p br').should('exist')
 	})
 
 	it('Do not create hard breaks within headings', () => {
 		cy.getContent().type('# Hello')
 		cy.getContent().type('{shift+enter}world')
-		cy.getContent()
-			.find('h1 br')
-			.should('not.exist')
+		cy.getContent().find('h1 br').should('not.exist')
 	})
 })

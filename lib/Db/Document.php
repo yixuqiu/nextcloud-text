@@ -1,32 +1,18 @@
 <?php
+
+declare(strict_types=1);
+
 /**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text\Db;
 
-use OCP\AppFramework\Db\Entity;
+use OCP\AppFramework\Db\SnowflakeAwareEntity;
+use OCP\DB\Types;
 
 /**
- * @method getId(): int
  * @method getCurrentVersion(): int
  * @method setCurrentVersion(int $version): void
  * @method getLastSavedVersion(): int
@@ -39,23 +25,48 @@ use OCP\AppFramework\Db\Entity;
  * @method setLastSavedVersionEtag(string $etag): void
  * @method getBaseVersionEtag(): string
  * @method setBaseVersionEtag(string $etag): void
+ * @method getChecksum(): ?string
+ * @method setChecksum(?string $checksum): void
+ * @method getContextType(): string
+ * @method setContextType(string $contextType): void
+ * @method getContextId(): int
+ * @method setContextId(int $contextId): void
  */
-class Document extends Entity implements \JsonSerializable {
+class Document extends SnowflakeAwareEntity implements \JsonSerializable {
+	/** @var ?string $id
+	 * @psalm-suppress NonInvariantDocblockPropertyType
+	 */
 	public $id = null;
 	// TODO: Remove obsolete field `currentVersion`
 	protected int $currentVersion = 0;
 	protected int $lastSavedVersion = 0;
 	protected int $initialVersion = 0;
 	protected int $lastSavedVersionTime = 0;
+	protected int $lastAttachmentCleanup = 0;
 	protected string $lastSavedVersionEtag = '';
 	protected string $baseVersionEtag = '';
+	protected ?string $checksum = null;
+	protected string $contextType = '';
+	protected int $contextId = 0;
 
 	public function __construct() {
-		$this->addType('id', 'integer');
-		$this->addType('currentVersion', 'integer');
-		$this->addType('lastSavedVersion', 'integer');
-		$this->addType('lastSavedVersionTime', 'integer');
-		$this->addType('initialVersion', 'integer');
+		$this->addType('id', Types::STRING);
+		$this->addType('currentVersion', Types::INTEGER);
+		$this->addType('lastSavedVersion', Types::INTEGER);
+		$this->addType('lastSavedVersionTime', Types::INTEGER);
+		$this->addType('lastAttachmentCleanup', Types::BIGINT);
+		$this->addType('initialVersion', Types::INTEGER);
+		$this->addType('checksum', Types::STRING);
+		$this->addType('contextType', Types::STRING);
+		$this->addType('contextId', Types::INTEGER);
+	}
+
+	public function getLastAttachmentCleanup(): int {
+		return $this->lastAttachmentCleanup;
+	}
+
+	public function setLastAttachmentCleanup(int $time): void {
+		$this->setter('lastAttachmentCleanup', [$time]);
 	}
 
 	public function jsonSerialize(): array {
@@ -64,7 +75,17 @@ class Document extends Entity implements \JsonSerializable {
 			'lastSavedVersion' => $this->lastSavedVersion,
 			'lastSavedVersionTime' => $this->lastSavedVersionTime,
 			'baseVersionEtag' => $this->baseVersionEtag,
-			'initialVersion' => $this->initialVersion
+			'initialVersion' => $this->initialVersion,
+			'checksum' => $this->checksum,
+			'contextType' => $this->contextType,
+			'contextId' => $this->contextId,
 		];
+	}
+
+	/**
+	 * Short identifier - mostly for logging
+	 */
+	public function toString(): string {
+		return $this->contextType . ' (' . $this->contextId . ')';
 	}
 }

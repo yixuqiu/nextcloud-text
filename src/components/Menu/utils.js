@@ -1,80 +1,118 @@
-/*
- * @copyright Copyright (c) 2022 Vinicius Reis <vinicius@nextcloud.com>
- *
- * @author Vinicius Reis <vinicius@nextcloud.com>
- * @author Grigorii K. Shartsev <me@shgk.me>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+/* eslint-disable jsdoc/require-param-type */
+/* eslint-disable jsdoc/require-param-description */
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import {
-	TRANSLATIONS,
-	MODIFIERS,
-} from './keys.js'
+import { MODIFIERS, TRANSLATIONS } from './keys.js'
 
-const getEntryClasses = (actionEntry, isActive) => {
+/**
+ *
+ * @param actionEntry
+ * @param isActive
+ */
+function getEntryClasses(actionEntry, isActive) {
 	return {
 		'is-active': isActive,
 		[`action-menu-${actionEntry.key}`]: true,
 	}
 }
 
-const keysString = (keyChar, modifiers = []) => {
+/**
+ *
+ * @param keyChar
+ * @param modifiers
+ */
+function keysString(keyChar, modifiers = []) {
 	return modifiers
-		.map(mod => TRANSLATIONS[mod])
+		.map((mod) => TRANSLATIONS[mod])
 		.concat(keyChar.toUpperCase())
 		.join('+')
 }
 
-const getKeyshortcuts = ({ keyChar, keyModifiers = [] }) => {
+/**
+ *
+ * @param root0
+ * @param root0.keyChar
+ * @param root0.keyModifiers
+ */
+function getKeyshortcuts({ keyChar, keyModifiers = [] }) {
 	return keyModifiers
-		.map(mod => MODIFIERS[mod])
+		.map((mod) => MODIFIERS[mod])
 		.concat(keyChar)
 		.join('+')
 }
 
-const getKeys = (isMobile, { keyChar, keyModifiers }) => {
-	return (!isMobile && keyChar)
-		? `(${keysString(keyChar, keyModifiers)})`
-		: ''
+/**
+ *
+ * @param isMobile
+ * @param root0
+ * @param root0.keyChar
+ * @param root0.keyModifiers
+ */
+function getKeys(isMobile, { keyChar, keyModifiers }) {
+	return !isMobile && keyChar ? `(${keysString(keyChar, keyModifiers)})` : ''
 }
 
-const isDisabled = (actionEntry, $editor) => {
-	return actionEntry.action && !actionEntry.action($editor.can())
+/**
+ *
+ * @param actionEntry
+ * @param editor
+ */
+function isDisabled(actionEntry, editor) {
+	return actionEntry.action && !actionEntry.action(editor.can(), editor)
 }
 
-const getIsActive = ({ isActive }, $editor) => {
+/**
+ *
+ * @param root0
+ * @param root0.isActive
+ * @param editor
+ */
+function getIsActive({ isActive }, editor) {
 	if (!isActive) {
 		return false
 	}
 
-	const args = Array.isArray(isActive)
-		? isActive
-		: [isActive]
+	// Supports either one type or an array of types
+	const types = Array.isArray(isActive) ? isActive : [isActive]
 
-	return $editor.isActive(...args)
+	for (const type of types) {
+		let args
+		// Supports either a type string or an object with type name and type attributes.
+		// Name can be `null`, only give `attributes` to isActive in this case.
+		if (type !== null && typeof type === 'object') {
+			args = type.name
+				? [type.name, { ...type.attributes }]
+				: [{ ...type.attributes }]
+		} else {
+			args = [type]
+		}
+		if (editor.isActive(...args)) {
+			return true
+		}
+	}
+
+	return false
 }
 
-const getType = (actionEntry) => {
+/**
+ *
+ * @param actionEntry
+ */
+function getActionType(actionEntry) {
 	// isActive stores the value changing on active state change (on click)
 
-	// If it is an array, the button is one of the list of alternative values for a specific option
-	// Like ['heading', { level: 1 }]
+	// If it is an array, the button is a submenu button.
+	// Like `['bulletList', 'orderedList']`
 	if (Array.isArray(actionEntry.isActive)) {
+		return 'button'
+	}
+
+	// If it is an object, the button is one of the list of alternative values for a specific option.
+	// Like `{ name: 'heading', attributes: { level: 1 } }`
+	if (actionEntry.isActive && typeof actionEntry.isActive === 'object') {
 		return 'radio'
 	}
 
@@ -87,22 +125,27 @@ const getType = (actionEntry) => {
 	return 'button'
 }
 
-const getActionState = (actionEntry, $editor) => {
-	const active = getIsActive(actionEntry, $editor)
+/**
+ *
+ * @param actionEntry
+ * @param editor
+ */
+function getActionState(actionEntry, editor) {
+	const active = getIsActive(actionEntry, editor)
 
 	return {
-		disabled: isDisabled(actionEntry, $editor),
+		disabled: isDisabled(actionEntry, editor),
 		class: getEntryClasses(actionEntry, active),
 		active,
-		type: getType(actionEntry),
 	}
 }
 
 export {
-	isDisabled,
+	getActionState,
+	getActionType,
+	getEntryClasses,
 	getIsActive,
 	getKeys,
 	getKeyshortcuts,
-	getEntryClasses,
-	getActionState,
+	isDisabled,
 }

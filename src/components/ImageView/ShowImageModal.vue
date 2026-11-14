@@ -1,66 +1,84 @@
+<!--
+  - SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 <template>
-	<NcModal v-if="show"
+	<NcModal
+		v-if="show"
 		size="large"
 		:name="currentImage.name"
-		:out-transition="true"
-		:has-next="true"
-		:has-previous="true"
-		:close-button-contained="false"
-		:dark="true"
+		outTransition
+		hasNext
+		hasPrevious
+		:closeButtonOutside="true"
+		dark
 		@next="showNextImage"
 		@previous="showPreviousImage"
 		@close="$emit('close')">
 		<div class="modal__content">
-			<img :src="currentImage.previewUrl">
+			<img :src="currentImage.fullUrl">
 		</div>
 	</NcModal>
 </template>
 
 <script>
-import { NcModal } from '@nextcloud/vue'
+import NcModal from '@nextcloud/vue/components/NcModal'
 
 export default {
 	name: 'ShowImageModal',
 	components: {
 		NcModal,
 	},
+
 	props: {
 		images: {
 			type: Array,
 			required: true,
 		},
+
 		startIndex: {
 			type: Number,
 			default: 0,
 		},
+
 		show: {
 			type: Boolean,
 			default: false,
 		},
 	},
+
+	emits: ['close'],
+
 	data() {
 		return {
 			currentImageIndex: 0,
 		}
 	},
+
 	computed: {
 		currentImage() {
 			return this.images[this.currentImageIndex]
 		},
 	},
+
 	watch: {
-		'startIndex'(val) {
+		startIndex(val) {
 			this.currentImageIndex = val
 		},
 	},
+
 	methods: {
 		showNextImage() {
-			this.currentImageIndex = (this.currentImageIndex + 1) % this.images.length
+			this.currentImageIndex
+				= (this.currentImageIndex + 1) % this.images.length
 		},
+
 		showPreviousImage() {
-			this.currentImageIndex = this.currentImageIndex <= 0
-				? this.images.length - 1
-				: this.currentImageIndex - 1
+			this.currentImageIndex
+				= this.currentImageIndex <= 0
+					? this.images.length - 1
+					: this.currentImageIndex - 1
 		},
 	},
 }

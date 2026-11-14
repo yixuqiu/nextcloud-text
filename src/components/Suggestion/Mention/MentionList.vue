@@ -1,7 +1,13 @@
+<!--
+  - SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 <template>
 	<SuggestionListWrapper ref="suggestionList" :command="command" :items="items">
-		<template #default="{ item, active}">
-			<AutoCompleteResult :id="item.id"
+		<template #default="{ item, active }">
+			<NcAutoCompleteResult
+				:id="item.id"
 				:label="item.label"
 				icon="icon-user"
 				source="users"
@@ -14,25 +20,30 @@
 </template>
 
 <script>
-import AutoCompleteResult from './AutoCompleteResult.vue'
+import { t } from '@nextcloud/l10n'
+import { NcAutoCompleteResult } from '@nextcloud/vue'
 import SuggestionListWrapper from '../SuggestionListWrapper.vue'
 
 export default {
 	components: {
-		AutoCompleteResult,
+		NcAutoCompleteResult,
 		SuggestionListWrapper,
 	},
+
 	props: {
 		items: {
 			type: Array,
 			required: true,
 		},
+
 		command: {
 			type: Function,
 			required: true,
 		},
 	},
+
 	methods: {
+		t,
 		onKeyDown({ event }) {
 			// Ignore any key modifier combinations
 			return this.$refs.suggestionList?.onKeyDown({ event })

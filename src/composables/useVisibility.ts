@@ -1,0 +1,94 @@
+/**
+ * SPDX-FileCopyrightText: 2025 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+import type { InjectionKey, Ref } from 'vue'
+
+import {
+	computed,
+	inject,
+	nextTick,
+	onMounted,
+	onUnmounted,
+	provide,
+	readonly,
+	shallowRef,
+} from 'vue'
+import { logger } from '../helpers/logger.ts'
+import { useEditor } from './useEditor.ts'
+
+export const intersectionObserverKey = Symbol('text:intersection_observer') as InjectionKey<IntersectionObserver>
+export const visibleIdsKey = Symbol('text:visibile_ids') as InjectionKey<
+	Ref<Set<string>>
+>
+
+const intersectionObserverOptions = {
+	root: null,
+	rootMargin: '0px 0px -50% 0px',
+	threshold: 0,
+}
+
+/**
+ *
+ */
+export function provideIntersectionObserver() {
+	// Vue2 does not support reactive sets.
+	// So the shallow ref needs to be explicitely written every time the set changes.
+	const visibleIds = shallowRef<Set<string>>(new Set())
+	const update: IntersectionObserverCallback = (entries) => {
+		const ids = new Set(visibleIds.value)
+		entries.forEach((entry) => {
+			if (entry.isIntersecting) {
+				ids.add(entry.target.id)
+			} else {
+				ids.delete(entry.target.id)
+			}
+		})
+		visibleIds.value = ids
+	}
+
+	const intersectionObserver = new IntersectionObserver(
+		update,
+		intersectionObserverOptions,
+	)
+
+	onUnmounted(() => {
+		intersectionObserver.disconnect()
+	})
+	provide(intersectionObserverKey, intersectionObserver)
+	provide(visibleIdsKey, visibleIds)
+}
+
+/**
+ *
+ * @param id of the html element in the viewers dom
+ */
+export function useVisibility(id: string) {
+	const { editor } = useEditor()
+	const intersectionObserver = inject(intersectionObserverKey)!
+	const visibleIds = inject(visibleIdsKey)!
+	let observedEl: Element | null = null
+
+	onMounted(() => {
+		nextTick(() => {
+			observedEl = editor.view.dom.querySelector(`#${id}`)
+			if (observedEl) {
+				intersectionObserver.observe(observedEl)
+			} else {
+				logger.warn(`Could not find element with id ${id}`)
+			}
+		})
+	})
+
+	onUnmounted(() => {
+		visibleIds.value.delete(id)
+		visibleIds.value = new Set(visibleIds.value) // trigger reactivity
+		if (observedEl) {
+			intersectionObserver.unobserve(observedEl)
+			observedEl = null
+		}
+	})
+	const visible = computed(() => visibleIds.value.has(id))
+	return { visible: readonly(visible) }
+}

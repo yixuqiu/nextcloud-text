@@ -1,6 +1,7 @@
 OC.L10N.register(
     "text",
     {
+    "File not found" : "Նիշքը չգտնվեց",
     "The file was uploaded" : "Նիշքը վերբերռնված է",
     "The uploaded file exceeds the upload_max_filesize directive in php.ini" : "Վերբեռնած նիշքը գերազանցում է upload_max_filesize սահմանված php.ini֊ում",
     "The uploaded file exceeds the MAX_FILE_SIZE directive that was specified in the HTML form" : "Վերբեռնած նիշքը գերազանցում է MAX_FILE_SIZE, որը սահմանված է HTML ձևաթղթում",
@@ -9,14 +10,22 @@ OC.L10N.register(
     "Missing a temporary folder" : "Բացակայում է ժամանակավոր պանակը",
     "Could not write file to disk" : "Չհաջողվեց գրառել նիշքը սկավառակի վրա",
     "A PHP extension stopped the file upload" : "PHP֊ի ընդլայնումն կանգնեցրեց նիշքի վերբեռնումը",
-    "Translate" : "Թարգմանել",
+    "Comment" : "Մեկնաբանել",
+    "Close" : "Փակել",
     "guest" : "հյուր",
-    "Saved" : "Պահված",
-    "Cancel" : "չեղարկել",
-    "URL" : "URL",
     "Edit" : "մշակել",
+    "Delete" : "Delete",
+    "Save" : "Պահպանել",
+    "Cancel" : "չեղարկել",
+    "Previous" : "Նախորդ",
+    "Copy link" : "Պատճենել հղումը",
+    "Saved" : "Պահված",
+    "Link" : "Հղում",
+    "URL" : "URL",
+    "Translate" : "Թարգմանել",
+    "Upload" : "Բեռնել",
     "Source code" : "ծրագրի կոդը",
-    "Info" : "Info",
-    "Warning" : "Զգուշացում"
+    "Details" : "Մանրամասներ",
+    "Choose" : "Ընտրել"
 },
 "nplurals=2; plural=(n != 1);");

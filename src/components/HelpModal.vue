@@ -1,13 +1,24 @@
+<!--
+  - SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 <template>
-	<NcDialog size="normal"
+	<NcDialog
+		size="large"
 		data-text-el="formatting-help"
-		:name="t('text', 'Formatting help')"
-		:close-on-click-outside="true"
+		:name="t('text', 'Formatting and shortcuts')"
+		closeOnClickOutside
 		@closing="$emit('close')">
-		<h2>{{ t('text', 'Formatting help') }}</h2>
+		<h2>{{ t('text', 'Formatting and shortcuts') }}</h2>
 		<p>{{ t('text', 'Speed up your writing with simple shortcuts.') }}</p>
 		<p v-if="!isMobileCached">
-			{{ t('text', 'Just type the Markdown syntax or use keyboard shortcuts from below.') }}
+			{{
+				t(
+					'text',
+					'Just type the Markdown syntax or use keyboard shortcuts from below.',
+				)
+			}}
 		</p>
 		<p v-else>
 			{{ t('text', 'Just type the Markdown syntax from below.') }}
@@ -46,27 +57,44 @@
 				</tr>
 				<tr>
 					<td>{{ t('text', 'Bold') }}</td>
-					<td><code>**{{ t('text', 'Bold text') }}**</code></td>
+					<td>
+						<code>**{{ t('text', 'Bold text') }}**</code>
+					</td>
 					<td v-if="!isMobileCached">
-						<kbd>{{ t('text', 'Ctrl') }}</kbd>
+						<kbd>{{ ctrlOrModKey }}</kbd>
 						+
 						<kbd>B</kbd>
 					</td>
 				</tr>
 				<tr>
 					<td>{{ t('text', 'Italic') }}</td>
-					<td><code>*{{ t('text', 'Italicized text') }}*</code></td>
+					<td>
+						<code>*{{ t('text', 'Italicized text') }}*</code>
+					</td>
 					<td v-if="!isMobileCached">
-						<kbd>{{ t('text', 'Ctrl') }}</kbd>
+						<kbd>{{ ctrlOrModKey }}</kbd>
 						+
 						<kbd>I</kbd>
 					</td>
 				</tr>
 				<tr>
-					<td>{{ t('text', 'Strikethrough') }}</td>
-					<td><code>~~{{ t('text', 'Mistaken text') }}~~</code></td>
+					<td>{{ t('text', 'Underline') }}</td>
+					<td>
+						<code>__{{ t('text', 'Underlined text') }}__</code>
+					</td>
 					<td v-if="!isMobileCached">
-						<kbd>{{ t('text', 'Ctrl') }}</kbd>
+						<kbd>{{ ctrlOrModKey }}</kbd>
+						+
+						<kbd>U</kbd>
+					</td>
+				</tr>
+				<tr>
+					<td>{{ t('text', 'Strikethrough') }}</td>
+					<td>
+						<code>~~{{ t('text', 'Mistaken text') }}~~</code>
+					</td>
+					<td v-if="!isMobileCached">
+						<kbd>{{ ctrlOrModKey }}</kbd>
 						+
 						<kbd>{{ t('text', 'Shift') }}</kbd>
 						+
@@ -74,12 +102,16 @@
 					</td>
 				</tr>
 				<tr>
-					<td>{{ t('text', 'Underline') }}</td>
-					<td><code>__{{ t('text', 'Underlined text') }}__</code></td>
+					<td>{{ t('text', 'Highlight') }}</td>
+					<td>
+						<code>=={{ t('text', 'Highlighted text') }}==</code>
+					</td>
 					<td v-if="!isMobileCached">
-						<kbd>{{ t('text', 'Ctrl') }}</kbd>
+						<kbd>{{ ctrlOrModKey }}</kbd>
 						+
-						<kbd>U</kbd>
+						<kbd>{{ t('text', 'Shift') }}</kbd>
+						+
+						<kbd>H</kbd>
 					</td>
 				</tr>
 				<tr>
@@ -90,7 +122,7 @@
 						<code># {{ t('text', 'Heading level 1') }}</code>
 					</td>
 					<td v-if="!isMobileCached" class="ellipsis_top">
-						<kbd>{{ t('text', 'Ctrl') }}</kbd>
+						<kbd>{{ ctrlOrModKey }}</kbd>
 						+
 						<kbd>{{ t('text', 'Shift') }}</kbd>
 						+
@@ -116,7 +148,7 @@
 						<code>###### {{ t('text', 'Heading level 6') }}</code>
 					</td>
 					<td v-if="!isMobileCached" class="noborder ellipsis_bottom">
-						<kbd>{{ t('text', 'Ctrl') }}</kbd>
+						<kbd>{{ ctrlOrModKey }}</kbd>
 						+
 						<kbd>{{ t('text', 'Shift') }}</kbd>
 						+
@@ -129,7 +161,7 @@
 						<code>* {{ t('text', 'An item') }}</code>
 					</td>
 					<td v-if="!isMobileCached">
-						<kbd>{{ t('text', 'Ctrl') }}</kbd>
+						<kbd>{{ ctrlOrModKey }}</kbd>
 						+
 						<kbd>{{ t('text', 'Shift') }}</kbd>
 						+
@@ -142,7 +174,7 @@
 						<code>1. {{ t('text', 'First item') }}</code>
 					</td>
 					<td v-if="!isMobileCached">
-						<kbd>{{ t('text', 'Ctrl') }}</kbd>
+						<kbd>{{ ctrlOrModKey }}</kbd>
 						+
 						<kbd>{{ t('text', 'Shift') }}</kbd>
 						+
@@ -154,7 +186,13 @@
 					<td>
 						<code>* [] {{ t('text', 'To-Do item') }}</code>
 					</td>
-					<td v-if="!isMobileCached" />
+					<td v-if="!isMobileCached">
+						<kbd>{{ ctrlOrModKey }}</kbd>
+						+
+						<kbd>{{ t('text', 'Shift') }}</kbd>
+						+
+						<kbd>9</kbd>
+					</td>
 				</tr>
 				<tr>
 					<td>{{ t('text', 'Blockquote') }}</td>
@@ -162,7 +200,7 @@
 						<code>> {{ t('text', 'Quoted text') }}</code>
 					</td>
 					<td v-if="!isMobileCached">
-						<kbd>{{ t('text', 'Ctrl') }}</kbd>
+						<kbd>{{ ctrlOrModKey }}</kbd>
 						+
 						<kbd>></kbd>
 					</td>
@@ -174,20 +212,120 @@
 					</td>
 					<td v-if="!isMobileCached" />
 				</tr>
+				<tr>
+					<td>{{ t('text', 'Link') }}</td>
+					<td>
+						<code>[Title](https://example.org)</code>
+					</td>
+					<td v-if="!isMobileCached">
+						<kbd>{{ ctrlOrModKey }}</kbd>
+						+
+						<kbd>K</kbd>
+					</td>
+				</tr>
+				<tr>
+					<td>{{ t('text', 'Comment') }}</td>
+					<td>
+						<code>[?]</code>
+					</td>
+					<td v-if="!isMobileCached">
+						<kbd>{{ ctrlOrModKey }}</kbd>
+						+
+						<kbd>{{ t('text', 'Alt') }}</kbd>
+						+
+						<kbd>M</kbd>
+					</td>
+				</tr>
+				<tr>
+					<td>{{ t('text', 'Footnote') }}</td>
+					<td>
+						<code>[^]</code>
+					</td>
+					<td v-if="!isMobileCached">
+						<kbd>{{ ctrlOrModKey }}</kbd>
+						+
+						<kbd>{{ t('text', 'Shift') }}</kbd>
+						+
+						<kbd>F</kbd>
+					</td>
+				</tr>
+				<tr>
+					<td>{{ t('text', 'Emoji') }}</td>
+					<td>
+						<code>:{{ t('text', 'emoji') }}</code>
+					</td>
+					<td v-if="!isMobileCached" />
+				</tr>
+				<tr>
+					<td>{{ t('text', 'Mention someone') }}</td>
+					<td>
+						<code>@{{ t('text', 'name') }}</code>
+					</td>
+					<td v-if="!isMobileCached" />
+				</tr>
+				<tr>
+					<td>{{ t('text', 'Smart picker') }}</td>
+					<td>
+						<code>/{{ t('text', 'something') }}</code>
+					</td>
+					<td v-if="!isMobileCached" />
+				</tr>
+			</tbody>
+		</table>
+
+		<table vif="!isMobileCached">
+			<thead>
+				<tr>
+					<th>{{ t('text', 'Action') }}</th>
+					<th>{{ t('text', 'Keyboard shortcuts') }}</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr>
+					<td>{{ t('text', 'Undo') }}</td>
+					<td>
+						<kbd>{{ ctrlOrModKey }}</kbd>
+						+
+						<kbd>Z</kbd>
+					</td>
+				</tr>
+				<tr>
+					<td>{{ t('text', 'Redo') }}</td>
+					<td>
+						<kbd>{{ ctrlOrModKey }}</kbd>
+						+
+						<kbd>Y</kbd>
+					</td>
+				</tr>
+				<tr>
+					<td>{{ t('text', 'Toggle outline') }}</td>
+					<td>
+						<kbd>{{ ctrlOrModKey }}</kbd>
+						+
+						<kbd>{{ t('text', 'Alt') }}</kbd>
+						+
+						<kbd>H</kbd>
+					</td>
+				</tr>
 			</tbody>
 		</table>
 	</NcDialog>
 </template>
 
 <script>
-import { NcDialog } from '@nextcloud/vue'
+import { t } from '@nextcloud/l10n'
+import NcDialog from '@nextcloud/vue/components/NcDialog'
 import { isMobilePlatform } from '../helpers/platform.js'
+import { MODIFIERS, TRANSLATIONS } from './Menu/keys.js'
 
 export default {
 	name: 'HelpModal',
 	components: {
 		NcDialog,
 	},
+
+	emits: ['close'],
+
 	data() {
 		return {
 			formatted: {
@@ -202,95 +340,106 @@ export default {
 				blockQuote: true,
 				codeBlock: true,
 			},
+
+			ctrlOrModKey: TRANSLATIONS[MODIFIERS.Mod],
 		}
 	},
+
 	computed: {
 		isFormatted() {
 			return (style) => this.formatted[style]
 		},
+
 		// Cache the output of `isMobilePlatform()`
 		isMobileCached() {
 			return this.isMobilePlatform()
 		},
 	},
+
 	methods: {
+		t,
 		toggleFormatted(style) {
 			this.formatted[style] = !this.formatted[style]
 		},
+
 		isMobilePlatform,
 	},
 }
 </script>
 
 <style lang="scss" scoped>
-	table {
-		margin-top: 24px;
-		border-collapse: collapse;
+@use '../css/prosemirror';
 
-		tbody tr {
-			&:hover, &:focus, &:active {
-				background-color: transparent !important;
-			}
-		}
+table {
+	margin-top: 24px;
+	border-collapse: collapse;
+	width: 100%;
 
-		thead tr {
-			border: none;
-		}
-
-		th {
-			font-weight: bold;
-			padding: .75rem 1rem .75rem 0;
-			border-bottom: 2px solid var(--color-background-darker);
-		}
-
-		td {
-			padding: .75rem 1rem .75rem 0;
-			border-top: 1px solid var(--color-background-dark);
-			border-bottom: unset;
-
-			&.noborder {
-				border-top: unset;
-			}
-
-			&.ellipsis_top {
-				padding-bottom: 0;
-			}
-
-			&.ellipsis {
-				padding-top: 0;
-				padding-bottom: 0;
-			}
-
-			&.ellipsis_bottom {
-				padding-top: 0;
-			}
-		}
-
-		kbd {
-			font-size: smaller;
-		}
-
-		code {
-			padding: .2em .4em;
-			font-size: 90%;
-			background-color: var(--color-background-dark);
-			border-radius: 6px;
+	tbody tr {
+		&:hover,
+		&:focus,
+		&:active {
+			background-color: transparent !important;
 		}
 	}
 
-	@import '../css/prosemirror';
+	thead tr {
+		border: none;
+	}
 
-	div.ProseMirror {
+	th {
+		font-weight: bold;
+		padding: 0.75rem 1rem 0.75rem 0;
+		border-bottom: 2px solid var(--color-background-darker);
+	}
+
+	td {
+		padding: 0.75rem 1rem 0.75rem 0;
+		border-top: 1px solid var(--color-background-dark);
+		border-bottom: unset;
+
+		&.noborder {
+			border-top: unset;
+		}
+
+		&.ellipsis_top {
+			padding-bottom: 0;
+		}
+
+		&.ellipsis {
+			padding-top: 0;
+			padding-bottom: 0;
+		}
+
+		&.ellipsis_bottom {
+			padding-top: 0;
+		}
+	}
+
+	kbd {
+		font-size: smaller;
+	}
+
+	code {
+		padding: 0.2em 0.4em;
+		font-size: 90%;
+		background-color: var(--color-background-dark);
+		border-radius: 6px;
+	}
+}
+
+div.ProseMirror {
+	display: inline;
+	margin-top: unset;
+	position: unset;
+	padding: unset;
+	line-height: unset;
+
+	h1,
+	h6 {
 		display: inline;
-		margin-top: unset;
-		position: unset;
-		padding: unset;
-		line-height: unset;
-
-		h1, h6 {
-			display: inline;
-			padding: 0;
-			margin: 0;
-		}
+		padding: 0;
+		margin: 0;
 	}
+}
 </style>

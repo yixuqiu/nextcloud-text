@@ -2,25 +2,8 @@
 
 declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text\AppInfo;
@@ -35,6 +18,8 @@ return [
 		['name' => 'Attachment#insertAttachmentFile', 'url' => '/attachment/filepath', 'verb' => 'POST'],
 		/** @see Controller\AttachmentController::uploadAttachment() */
 		['name' => 'Attachment#uploadAttachment', 'url' => '/attachment/upload', 'verb' => 'POST'],
+		/** @see Controller\AttachmentController::createAttachment() */
+		['name' => 'Attachment#createAttachment', 'url' => '/attachment/create', 'verb' => 'POST'],
 		/** @see Controller\AttachmentController::getImageFile() */
 		['name' => 'Attachment#getImageFile', 'url' => '/image', 'verb' => 'GET'],
 		/** @see Controller\AttachmentController::getMediaFile() */
@@ -43,7 +28,7 @@ return [
 		['name' => 'Attachment#getMediaFilePreview', 'url' => '/mediaPreview', 'verb' => 'GET'],
 
 		/** @see Controller\SessionController::create() */
-		['name' => 'Session#create', 'url' => '/session/{documentId}/create', 'verb' => 'PUT'],
+		['name' => 'Session#create', 'url' => '/session/{type}/{id}/create', 'verb' => 'PUT'],
 		/** @see Controller\SessionController::save() */
 		['name' => 'Session#save', 'url' => '/session/{documentId}/save', 'verb' => 'POST'],
 		/** @see Controller\SessionController::sync() */
@@ -73,6 +58,9 @@ return [
 
 		/** @see Controller\UserApiController::index() */
 		['name' => 'UserApi#index', 'url' => '/api/v1/users', 'verb' => 'POST'],
+
+		/** @see Controller\AiController::tagFile() */
+		['name' => 'Ai#tagFile', 'url' => '/ai/tag/{fileId}', 'verb' => 'POST'],
 	],
 	'ocs' => [
 		/** @see Controller\WorkspaceController::folder() */

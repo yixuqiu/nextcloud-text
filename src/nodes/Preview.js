@@ -1,33 +1,14 @@
 /**
- * @copyright Copyright (c) 2024 Max <max@nextcloud.com>
- *
- * @author Max <max@nextcloud.com>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { Node, isNodeActive, getNodeType } from '@tiptap/core'
-import { domHref, parseHref, isLinkToSelfWithHash } from './../helpers/links.js'
-import { VueNodeViewRenderer } from '@tiptap/vue-2'
-
-import Preview from './Preview.vue'
+import { getMarkRange, getNodeType, isNodeActive, Node } from '@tiptap/core'
+import { VueNodeViewRenderer } from '@tiptap/vue-3'
+import PreviewView from './PreviewView.vue'
+import { domHref, isLinkToSelfWithHash, parseHref } from './../helpers/links.js'
 
 export default Node.create({
-
 	name: 'preview',
 
 	group: 'block',
@@ -50,7 +31,7 @@ export default Node.create({
 	addAttributes() {
 		return {
 			href: { parseHTML: parseHref },
-			title: { parseHTML: el => el.getAttribute('title') },
+			title: { parseHTML: (el) => el.getAttribute('title') },
 		}
 	},
 
@@ -64,69 +45,159 @@ export default Node.create({
 	},
 
 	renderHTML({ node }) {
-		return ['a', {
-			...node.attrs,
-			href: domHref(node, this.options.relativePath),
-			rel: 'noopener noreferrer nofollow',
-		}, 0]
+		return [
+			'a',
+			{
+				...node.attrs,
+				href: domHref(node, this.options.relativePath),
+				rel: 'noopener noreferrer nofollow',
+			},
+			0,
+		]
 	},
 
 	addNodeView() {
-		return VueNodeViewRenderer(Preview)
+		return VueNodeViewRenderer(PreviewView)
 	},
 
 	toMarkdown: (state, node) => {
 		state.write('[')
 		state.text(node.textContent, false)
 		state.write(`](${node.attrs.href} (${node.attrs.title}))`)
+		state.closeBlock(node)
 	},
 
 	addCommands() {
 		return {
-
 			/**
 			 * Turn a paragraph that contains a single link
 			 * into a preview.
 			 *
 			 */
-			setPreview: () => ({ state, chain }) => {
-				return previewPossible(state)
-					&& chain()
-						.setNode(this.name, previewAttributesFromSelection(state))
-						.run()
-			},
+			setPreview:
+				() => ({ state, chain }) => {
+					if (!previewPossible(state)) {
+						return false
+					}
+
+					const { $from } = state.selection
+
+					if (!hasOtherContent($from.parent)) {
+						// Parent node contains only a link
+						return chain()
+							.setNode(
+								this.name,
+								previewAttributesFromSelection(state),
+							)
+							.run()
+					}
+
+					// Allow splitting parent node only if paragraph or heading
+					if (
+						$from.parent.type.name !== 'paragraph'
+						&& $from.parent.type.name !== 'heading'
+					) {
+						return false
+					}
+
+					const previewAttrs = previewAttributesFromSelection(state)
+
+					// Link is surrounded by other text
+					const range = getMarkRange($from, state.schema.marks.link)
+					if (!range) {
+						return false
+					}
+
+					const hasContentBefore = range.from > $from.start()
+					const hasContentAfter = range.to < $from.end()
+
+					let c = chain()
+
+					if (hasContentAfter) {
+						c = c.setTextSelection(range.to).splitBlock()
+					}
+					if (hasContentBefore) {
+						c = c.setTextSelection(range.from).splitBlock()
+					} else {
+						c = c.setTextSelection($from.before() + 1)
+					}
+
+					return c.setNode(this.name, previewAttrs).run()
+				},
 
 			/**
 			 * Turn a preview back into a paragraph with a link.
 			 *
 			 */
-			unsetPreview: () => ({ state, chain }) => {
-				console.info(this.attributes)
-				return isActive(this.name, this.attributes, state)
-					&& chain()
-						.setNode('paragraph')
-						.run()
-			},
+			unsetPreview:
+				() => ({ state, chain }) => {
+					return (
+						isActive(this.name, this.attributes, state)
+						&& chain().setNode('paragraph').run()
+					)
+				},
 
+			/**
+			 * Insert a preview for given link.
+			 *
+			 * @param {string} link - the link URL
+			 * @param {string|null} title - the link title (optional)
+			 */
+			insertPreview:
+				(link, title = '') => ({ chain }) => {
+					title = title.trim() || link
+					return chain()
+						.insertContent({
+							type: 'preview',
+							attrs: { href: link, title: 'preview' },
+							content: [
+								{
+									type: 'text',
+									marks: [
+										{
+											type: 'link',
+											attrs: { href: link },
+										},
+									],
+									text: title,
+								},
+							],
+						})
+						.run()
+				},
 		}
 	},
 })
 
 /**
+ * Get link at cursor
+ *
+ * @param {object} state the editor state
+ */
+function getLinkAtCursor(state) {
+	const { $from } = state.selection
+	const range = getMarkRange($from, state.schema.marks.link)
+	if (!range) {
+		return null
+	}
+	return state.doc.resolve(range.from).nodeAfter
+}
+
+/**
  * Attributes for a preview from link in the current selection
  *
  * @param {object} state the edior state
- * @param {object} state.selection current selection
  * @return {object}
  */
-function previewAttributesFromSelection({ selection }) {
-	const { $from } = selection
-	const href = extractHref($from.nodeAfter)
+function previewAttributesFromSelection(state) {
+	const linkNode = getLinkAtCursor(state)
+	const href = extractHref(linkNode)
 	return { href, title: 'preview' }
 }
 
 /**
  * Is the active node one of typeOrName with the given attributes
+ *
  * @param {object|string} typeOrName type or name of the preview node type
  * @param {object} attributes attributes of the node
  * @param {object} state current editor state
@@ -139,16 +210,14 @@ function isActive(typeOrName, attributes, state) {
 
 /**
  * Is it possible to convert the currently selected node into a preview?
+ *
  * @param {object} state current editor state
  * @param {object} state.selection current selection
  * @return {boolean}
  */
-function previewPossible({ selection }) {
-	const { $from } = selection
-	if (hasOtherContent($from.parent)) {
-		return false
-	}
-	const href = extractHref($from.parent.firstChild)
+function previewPossible(state) {
+	const linkNode = getLinkAtCursor(state)
+	const href = extractHref(linkNode)
 	if (!href || isLinkToSelfWithHash(href)) {
 		return false
 	}
@@ -157,16 +226,20 @@ function previewPossible({ selection }) {
 
 /**
  * Does the node contain more content than the first child
+ *
  * @param {object} node node to inspect
  * @return {boolean}
  */
 function hasOtherContent(node) {
-	return node.childCount > 2
+	return (
+		node.childCount > 2
 		|| (node.childCount === 2 && node.lastChild.textContent.trim())
+	)
 }
 
 /**
  * Get the link href of the given node
+ *
  * @param {object} node to inspect
  * @return {string} The href of the link mark of the node
  */
@@ -174,6 +247,6 @@ function extractHref(node) {
 	if (!node) {
 		return undefined
 	}
-	const link = node.marks.find(mark => mark.type.name === 'link')
+	const link = node.marks.find((mark) => mark.type.name === 'link')
 	return link?.attrs.href
 }

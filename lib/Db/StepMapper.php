@@ -1,24 +1,8 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text\Db;
@@ -36,7 +20,7 @@ class StepMapper extends QBMapper {
 	/**
 	 * @return Step[]
 	 */
-	public function find(int $documentId, int $fromVersion): array {
+	public function find(string $documentId, int $fromVersion): array {
 		/* @var $qb IQueryBuilder */
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')
@@ -54,7 +38,7 @@ class StepMapper extends QBMapper {
 	/**
 	 * @psalm-return ?positive-int
 	 */
-	public function getLatestVersion(int $documentId): ?int {
+	public function getLatestVersion(string $documentId): ?int {
 		/* @var $qb IQueryBuilder */
 		$qb = $this->db->getQueryBuilder();
 		$result = $qb->select('id')
@@ -64,7 +48,7 @@ class StepMapper extends QBMapper {
 			->orderBy('id', 'DESC')
 			->executeQuery();
 
-		$data = $result->fetch();
+		$data = $result->fetchAssociative();
 		if ($data === false) {
 			return null;
 		}
@@ -72,15 +56,40 @@ class StepMapper extends QBMapper {
 		return $data['id'];
 	}
 
-	public function deleteAll(int $documentId): void {
+	public function getBeforeVersion(string $documentId, int $version, int $offset): int {
+		$qb = $this->db->getQueryBuilder();
+		$result = $qb->select('id')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('document_id', $qb->createNamedParameter($documentId)))
+			->andWhere($qb->expr()->lt('id', $qb->createNamedParameter($version)))
+			->setMaxResults($offset)
+			->orderBy('id', 'DESC')
+			->executeQuery();
+
+		$rows = $result->fetchAllAssociative();
+		$data = end($rows);
+		if ($data === false) {
+			return $version;
+		}
+
+		return $data['id'];
+	}
+
+	public function deleteAll(string $documentId): void {
 		$qb = $this->db->getQueryBuilder();
 		$qb->delete($this->getTableName())
 			->where($qb->expr()->eq('document_id', $qb->createNamedParameter($documentId)))
 			->executeStatement();
 	}
 
+	public function clearAll(): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->delete($this->getTableName())
+			->executeStatement();
+	}
+
 	// not in use right now
-	public function deleteBeforeVersion(int $documentId, int $version): int {
+	public function deleteBeforeVersion(string $documentId, int $version): int {
 		$qb = $this->db->getQueryBuilder();
 		return $qb->delete($this->getTableName())
 			->where($qb->expr()->eq('document_id', $qb->createNamedParameter($documentId)))
@@ -88,7 +97,7 @@ class StepMapper extends QBMapper {
 			->executeStatement();
 	}
 
-	public function deleteAfterVersion(int $documentId, int $version): int {
+	public function deleteAfterVersion(string $documentId, int $version): int {
 		$qb = $this->db->getQueryBuilder();
 		return $qb->delete($this->getTableName())
 			->where($qb->expr()->eq('document_id', $qb->createNamedParameter($documentId)))

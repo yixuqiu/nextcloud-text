@@ -1,92 +1,126 @@
 <!--
-  - @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
-  -
-  - @author Julius Härtl <jus@bitgrid.net>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -
-  -->
+  - SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
-	<div id="resolve-conflicts" class="collision-resolve-dialog" :class="{'icon-loading': clicked }">
-		<NcButton :disabled="clicked" data-cy="resolveThisVersion" @click="resolveThisVersion">
-			{{ t('text', 'Use current version') }}
+	<div
+		id="resolve-conflicts"
+		class="collision-resolve-dialog"
+		:class="{ 'icon-loading': clicked }">
+		<NcButton
+			wide
+			size="large"
+			:disabled="clicked"
+			data-cy="useEditorVersion"
+			@click="useEditorVersion">
+			{{ textForSource[editorSource] }}
 		</NcButton>
-		<NcButton :disabled="clicked" data-cy="resolveServerVersion" @click="resolveServerVersion">
-			{{ t('text', 'Use the saved version') }}
+		<NcButton
+			wide
+			:disabled="clicked"
+			data-cy="useReaderVersion"
+			@click="useReaderVersion">
+			{{ textForSource[readerSource] }}
 		</NcButton>
 	</div>
 </template>
 
 <script>
-import {
-	useEditorMixin,
-	useIsRichEditorMixin,
-	useSyncServiceMixin,
-} from './Editor.provider.js'
-import { NcButton } from '@nextcloud/vue'
-import setContent from './../mixins/setContent.js'
+import { t } from '@nextcloud/l10n'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import { useEditor } from '../composables/useEditor.ts'
+import { useEditorMethods } from '../composables/useEditorMethods.ts'
+import { useSaveService } from '../composables/useSaveService.ts'
+import { useSyncService } from '../composables/useSyncService.ts'
+import { logger } from '../helpers/logger.ts'
 export default {
 	name: 'CollisionResolveDialog',
 	components: {
 		NcButton,
 	},
-	mixins: [
-		useEditorMixin,
-		useIsRichEditorMixin,
-		setContent,
-		useSyncServiceMixin,
-	],
+
 	props: {
-		syncError: {
-			type: Object,
-			default: null,
+		otherVersion: {
+			type: String,
+			required: true,
+		},
+
+		readerSource: {
+			type: String,
+			required: true,
 		},
 	},
+
+	emits: ['resolved'],
+
+	setup(props) {
+		if (!['local', 'server'].includes(props.readerSource)) {
+			logger.warn('Invalid reader source', props)
+		}
+		const { editor } = useEditor()
+		const { syncService } = useSyncService()
+		const { saveService } = useSaveService()
+		const { setContent, setEditable } = useEditorMethods(editor)
+		const editorSource = props.readerSource === 'local' ? 'server' : 'local'
+		const textForSource = {
+			local: t(
+				'text',
+				'Keep my local changes and overwrite the remote version',
+			),
+
+			server: t('text', 'Discard my local changes and use the remote version'),
+		}
+		return {
+			editorSource,
+			textForSource,
+			setContent,
+			setEditable,
+			saveService,
+			syncService,
+			t,
+		}
+	},
+
 	data() {
 		return {
 			clicked: false,
 		}
 	},
+
 	methods: {
-		resolveThisVersion() {
+		useEditorVersion() {
 			this.clicked = true
-			this.$syncService.forceSave().then(() => this.$syncService.syncUp())
-			this.$editor.setEditable(!this.readOnly)
+			this.saveService.forceSave().then(() => {
+				this.syncService.syncUp()
+				this.$emit('resolved')
+			})
+			this.setEditable(!this.readOnly)
 		},
-		resolveServerVersion() {
-			const { outsideChange } = this.syncError.data
+
+		useReaderVersion() {
 			this.clicked = true
-			this.$editor.setEditable(!this.readOnly)
-			this.setContent(outsideChange, { isRichEditor: this.$isRichEditor })
-			this.$syncService.forceSave().then(() => this.$syncService.syncUp())
+			this.setEditable(!this.readOnly)
+			this.setContent(this.otherVersion)
+			this.saveService.forceSave().then(() => {
+				this.syncService.syncUp()
+				this.$emit('resolved')
+			})
 		},
 	},
 }
 </script>
 
 <style scoped lang="scss">
-	#resolve-conflicts {
-		display: flex;
-		width: 100%;
-		margin: auto;
-		padding: 20px 0;
-
-		button {
-			margin: auto;
-		}
+#resolve-conflicts {
+	position: sticky;
+	top: 0;
+	display: flex;
+	z-index: 1;
+	margin: auto;
+	padding: 0 var(--default-grid-baseline);
+	button {
+		margin: 0 var(--default-grid-baseline);
 	}
+}
 </style>

@@ -1,33 +1,14 @@
-/*
- * @copyright Copyright (c) 2022 Vinicius Reis <vinicius@nextcloud.com>
- *
- * @author Vinicius Reis <vinicius@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-/* eslint-disable jsdoc/valid-types */
-
+import { useIsMobile } from '@nextcloud/vue/composables/useIsMobile'
 import debounce from 'debounce'
-
-import { useEditorMixin, useIsMobileMixin } from '../Editor.provider.js'
-import { useOutlineActions, useOutlineStateMixin } from '../Editor/Wrapper.provider.js'
-import { getActionState, getKeys, getKeyshortcuts } from './utils.js'
-import useStore from '../../mixins/store.js'
+import { useEditor } from '../../composables/useEditor.ts'
+import { useEditorHeadings } from '../../composables/useEditorHeadings.ts'
+import { useReadOnlyActions } from '../Editor/EditorWrapper.provider.js'
+import { getActionState, getActionType, getKeys, getKeyshortcuts } from './utils.js'
 
 import './ActionEntry.scss'
 
@@ -35,7 +16,13 @@ import './ActionEntry.scss'
  * @type {import("vue").ComponentOptions} BaseActionEntry
  */
 const BaseActionEntry = {
-	mixins: [useEditorMixin, useIsMobileMixin, useStore, useOutlineActions, useOutlineStateMixin],
+	mixins: [useReadOnlyActions],
+	setup() {
+		const isMobile = useIsMobile()
+		const { editor } = useEditor()
+		const { displayToc } = useEditorHeadings()
+		return { displayToc, editor, isMobile }
+	},
 	props: {
 		actionEntry: {
 			type: Object,
@@ -48,15 +35,17 @@ const BaseActionEntry = {
 	},
 	data() {
 		return {
-			state: getActionState(this.actionEntry, this.$editor),
+			state: getActionState(this.actionEntry, this.editor),
+			actionType: getActionType(this.actionEntry),
 		}
 	},
+	emits: ['disabled'],
 	computed: {
 		label() {
 			const { label } = this.actionEntry
 
 			return typeof label === 'function'
-				? label(this)
+				? label({ displayToc: this.displayToc })
 				: label
 		},
 		icon() {
@@ -66,10 +55,10 @@ const BaseActionEntry = {
 			return getKeyshortcuts(this.actionEntry)
 		},
 		tooltip() {
-			return [
-				this.label,
-				getKeys(this.$isMobile, this.actionEntry),
-			].join(' ')
+			return [this.label, getKeys(this.isMobile, this.actionEntry)].join(' ')
+		},
+		listItemTooltip() {
+			return [getKeys(this.isMobile, this.actionEntry)].join(' ')
 		},
 	},
 	watch: {
@@ -80,25 +69,24 @@ const BaseActionEntry = {
 	},
 	mounted() {
 		this.$_updateState = debounce(this.updateState.bind(this), 50)
-		this.$editor.on('update', this.$_updateState)
-		this.$editor.on('selectionUpdate', this.$_updateState)
+		this.editor.on('update', this.$_updateState)
+		this.editor.on('selectionUpdate', this.$_updateState)
 		// Initially emit the disabled event to set the state in parent
 		this.$emit('disabled', this.state.disabled)
 		// Initially set the tabindex
 		this.setTabIndexOnButton()
 	},
-	beforeDestroy() {
-		this.$editor.off('update', this.$_updateState)
-		this.$editor.off('selectionUpdate', this.$_updateState)
+	beforeUnmount() {
+		this.editor.off('update', this.$_updateState)
+		this.editor.off('selectionUpdate', this.$_updateState)
 	},
 	methods: {
 		updateState() {
-			this.state = getActionState(this.actionEntry, this.$editor)
+			this.state = getActionState(this.actionEntry, this.editor)
 			this.$emit('disabled', this.state.disabled)
 		},
 		setTabIndexOnButton() {
-			/** @type {HTMLButtonElement} */
-			const button = this.$el.tagName.toLowerCase() === 'button' ? this.$el : this.$el.querySelector('button')
+			const button = this.getButton()
 
 			if (this.canBeFocussed === null) {
 				button.removeAttribute('tabindex')
@@ -110,9 +98,21 @@ const BaseActionEntry = {
 		 * Focus the inner button of this action
 		 */
 		focusButton() {
-			/** @type {HTMLButtonElement} */
-			const button = this.$el.tagName.toLowerCase() === 'button' ? this.$el : this.$el.querySelector('button')
-			button.focus()
+			this.getButton().focus()
+		},
+		/**
+		 * Open the menu of this action, e.g. when triggered from the remaining actions
+		 */
+		openMenu() {
+			this.getButton().click()
+		},
+		/**
+		 * @return {HTMLButtonElement} The inner button of this action
+		 */
+		getButton() {
+			return this.$el.tagName.toLowerCase() === 'button'
+				? this.$el
+				: this.$el.querySelector('button')
 		},
 	},
 }

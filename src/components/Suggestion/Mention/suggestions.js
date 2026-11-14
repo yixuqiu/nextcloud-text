@@ -1,49 +1,42 @@
-import axios from '@nextcloud/axios'
-import { generateUrl } from '@nextcloud/router'
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 import MentionList from './MentionList.vue'
+import { emitMention, getUsers } from '../../../apis/mention.ts'
 import createSuggestions from '../suggestions.js'
 
-const USERS_LIST_ENDPOINT_URL = generateUrl('apps/text/api/v1/users')
-
-const emitMention = ({ session, props }) => {
-	const documentId = session.documentId
-	axios.put(generateUrl(`apps/text/session/${documentId}/mention`), {
-		documentId,
-		sessionId: session.id,
-		sessionToken: session.token,
-		mention: props.id,
-	})
-}
-
-export default ({ session, params }) => createSuggestions({
+export default ({ connection, options }) => createSuggestions({
 	listComponent: MentionList,
 	items: async ({ query }) => {
-		const params = {
-			documentId: session.documentId,
-			sessionId: session.id,
-			sessionToken: session.token,
-			filter: query,
+		let customUsers = {}
+		if (typeof options?.mentionSearch === 'function') {
+			customUsers = await options.mentionSearch(query)
 		}
-		const response = await axios.post(USERS_LIST_ENDPOINT_URL, params)
-		const users = JSON.parse(JSON.stringify(response.data))
-		const result = []
 
-		Object.keys(users).map(key => result.push({
-			id: key,
-			label: users[key],
+		const entries = Object.entries(customUsers).map(([id, label]) => ({
+			id,
+			label,
 		}))
+		if (entries.length >= 6) {
+			return entries
+		}
 
-		return result
+		const serverUsers = await getUsers(query, { connection })
+		const serverEntries = Object.entries(serverUsers)
+			.filter(([id]) => !(id in customUsers))
+			.map(([id, label]) => ({ id, label }))
+			.slice(0, 6 - entries.length)
+
+		return [...entries, ...serverEntries]
 	},
 
 	command: ({ editor, range, props }) => {
-		if (params?.emitMention) {
-			params.emitMention({ props })
+		if (options?.emitMention) {
+			options.emitMention({ props })
 		} else {
-			emitMention({
-				session,
-				props,
-			})
+			emitMention(props.id, window.location, { connection })
 		}
 
 		// Insert mention
@@ -75,5 +68,5 @@ export default ({ session, params }) => createSuggestions({
 
 		window.getSelection()?.collapseToEnd()
 	},
-	...params,
+	...options,
 })

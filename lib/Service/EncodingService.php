@@ -3,38 +3,30 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2022 Raul Ferreira Fuentes <raul@nextcloud.com>
- *
- * @author Raul Ferreira Fuentes <raul@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\Text\Service;
 
 class EncodingService {
-	public const COMMON_ENCODINGS = [ 'UTF-8', 'GB2312', 'GBK', 'BIG-5', 'SJIS-win', 'EUC-JP', 'Windows-1252', 'ISO-8859-15', 'ISO-8859-1', 'ASCII'];
+	public const array COMMON_ENCODINGS = [ 'UTF-8', 'GB2312', 'GBK', 'BIG-5', 'SJIS-win', 'EUC-JP', 'Windows-1252', 'ISO-8859-15', 'ISO-8859-1', 'ASCII'];
 
-	public const UTF_BOMs = [
+	public const array UTF_BOMs = [
 		'UTF-32BE' => "\x00\x00\xfe\xff",
 		'UTF-32LE' => "\xff\xfe\x00\x00",
 		'UTF-16BE' => "\xfe\xff",
 		'UTF-16LE' => "\xff\xfe",
 		'UTF-8' => "\xef\xbb\xbf"
 	];
+
+	/**
+	 * Matches characters outside the XML 1.0 Char production, which cannot be
+	 * part of an XML document, not even escaped.
+	 *
+	 * @see https://www.w3.org/TR/xml/#charsets
+	 */
+	private const string XML_INVALID_CHARS = '/[^\x{9}\x{A}\x{D}\x{20}-\x{D7FF}\x{E000}-\x{FFFD}\x{10000}-\x{10FFFF}]/u';
 
 	public function encodeToUtf8(string $string): ?string {
 		$encoding = $this->detectEncoding($string);
@@ -44,6 +36,18 @@ class EncodingService {
 
 		$encoded = mb_convert_encoding($string, 'UTF-8', $encoding);
 		return is_string($encoded) ? $encoded : null;
+	}
+
+	/**
+	 * Encode to UTF-8 and replace characters that are not allowed in XML with U+FFFD
+	 */
+	public function encodeToXmlSafeUtf8(string $string): ?string {
+		$encoded = $this->encodeToUtf8($string);
+		if ($encoded === null) {
+			return null;
+		}
+
+		return preg_replace(self::XML_INVALID_CHARS, "\u{FFFD}", $encoded);
 	}
 
 	public function detectEncoding(string $string): ?string {

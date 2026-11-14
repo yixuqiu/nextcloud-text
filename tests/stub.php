@@ -12,24 +12,32 @@ namespace OC\AppFramework\OCS {
 	}
 }
 
-namespace OCA\Files\Event {
-	class LoadAdditionalScriptsEvent extends \OCP\EventDispatcher\Event {
+namespace OC\Files\Storage\Wrapper {
+	use OCP\Files\Storage\IStorage;
+
+	class Wrapper implements IStorage {
+		public function __construct(array $parameters) {
+		}
 	}
 }
 
-namespace OCA\Viewer\Event {
-	class LoadViewer extends \OCP\EventDispatcher\Event {
+namespace OCA\Collectives\Mount {
+
+	use OC\Files\Storage\Wrapper\Wrapper;
+	use OCP\Files\Storage\IConstructableStorage;
+
+	class CollectiveStorage extends Wrapper implements IConstructableStorage {
+	}
+}
+
+namespace OCA\Files\Event {
+	class LoadAdditionalScriptsEvent extends \OCP\EventDispatcher\Event {
 	}
 }
 
 namespace OCA\Files_Sharing\Event {
 	abstract class BeforeTemplateRenderedEvent extends \OCP\EventDispatcher\Event {
 		abstract public function getShare(): \OCP\Share\IShare;
-	}
-}
-
-namespace OC\User {
-	class NoUserException extends \Exception {
 	}
 }
 
@@ -47,5 +55,34 @@ namespace OCA\TpAssistant\Event {
 		abstract public function getTask(): Task;
 		abstract public function setWantsNotification(bool $wantsNotification): void;
 		abstract public function setNotificationTarget(?string $notificationTarget): void;
+	}
+}
+
+namespace OCA\NotifyPush\Queue {
+	interface IQueue {
+		/**
+		 * @param string $channel
+		 * @param mixed $message
+		 * @return void
+		 */
+		public function push(string $channel, $message);
+	}
+}
+
+namespace OCA\Files_Versions\Events {
+	abstract class VersionRestoredEvent extends \OCP\EventDispatcher\Event {
+		abstract public function getVersion(): \OCA\Files_Versions\Versions\IVersion;
+	}
+}
+
+namespace OCA\Files_Versions\Versions {
+	abstract class IVersion {
+		abstract public function getSourceFile(): \OCP\Files\File;
+	}
+}
+
+namespace OCA\DAV\Connector\Sabre {
+	class PublicAuth {
+		public const DAV_AUTHENTICATED = '';
 	}
 }

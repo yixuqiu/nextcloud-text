@@ -1,72 +1,34 @@
 <!--
-  - @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
-  -
-  - @author Julius Härtl <jus@bitgrid.net>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -
-  -->
+  - SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
-	<div data-text-el="editor-content-wrapper"
-		class="content-wrapper text-editor__content-wrapper"
-		:class="{
-			'--show-outline': showOutline
-		}">
-		<div v-if="showOutline" class="text-editor__content-wrapper__left">
-			<EditorOutline />
-		</div>
-		<EditorContent v-if="$editor"
+	<div data-text-el="editor-content-wrapper" class="editor__content-wrapper">
+		<EditorContent
 			id="read-only-editor"
 			class="editor__content text-editor__content"
-			:editor="$editor" />
-		<div class="text-editor__content-wrapper__right" />
+			:editor="editor" />
+		<TocContainer v-if="hasTableOfContents" />
 	</div>
 </template>
 
 <script>
 import { Editor } from '@tiptap/core'
-import { EditorContent } from '@tiptap/vue-2'
-import { EDITOR } from './Editor.provider.js'
-import { useOutlineStateMixin, useOutlineActions } from './Editor/Wrapper.provider.js'
-import EditorOutline from './Editor/EditorOutline.vue'
+import { EditorContent } from '@tiptap/vue-3'
+import { inject, markRaw, watch } from 'vue'
+import TocContainer from './Editor/TableOfContents/TocContainer.vue'
+import { provideEditor } from '../composables/useEditor.ts'
+import { useEditorFlags } from '../composables/useEditorFlags.ts'
+import { useEditorMethods } from '../composables/useEditorMethods.ts'
+import { logger } from '../helpers/logger.ts'
 
 export default {
 	name: 'BaseReader',
 	components: {
 		EditorContent,
-		EditorOutline,
+		TocContainer,
 	},
-
-	mixins: [useOutlineStateMixin, useOutlineActions],
-
-	provide() {
-		const val = {}
-
-		Object.defineProperties(val, {
-			[EDITOR]: {
-				get: () => this.$editor,
-			},
-		})
-
-		return val
-	},
-
-	// extensions is a factory building a list of extensions for the editor
-	inject: ['renderHtml', 'extensions'],
 
 	props: {
 		content: {
@@ -75,64 +37,45 @@ export default {
 		},
 	},
 
-	computed: {
-		htmlContent() {
-			return this.renderHtml(this.content)
-		},
-		showOutline() {
-			return this.$outlineState.visible
-		},
+	setup(props) {
+		// extensions is a factory building a list of extensions for the editor
+		const extensions = inject('extensions')
+		const editor = markRaw(new Editor({ extensions: extensions() }))
+		provideEditor(editor)
+
+		const { hasTableOfContents } = useEditorFlags()
+		const { setContent, setEditable } = useEditorMethods(editor)
+		watch(
+			() => props.content,
+			(content) => {
+				logger.warn('Content changed. Updating', { content })
+				setContent(content)
+			},
+		)
+		setEditable(false)
+
+		// Render the initial content last as it may render Vue components
+		// that break the vue context of this setup function.
+		setContent(props.content, { addToHistory: false })
+		return { editor, hasTableOfContents }
 	},
 
-	watch: {
-		content() {
-			this.updateContent()
-		},
-	},
-
-	created() {
-		this.$editor = this.createEditor()
-		this.$editor.setEditable(false)
-	},
-
-	beforeDestroy() {
-		this.$editor.destroy()
-	},
-
-	methods: {
-		createEditor() {
-			return new Editor({
-				content: this.htmlContent,
-				extensions: this.extensions(),
-			})
-		},
-
-		updateContent() {
-			this.$editor.commands.setContent(this.htmlContent, true)
-		},
+	beforeUnmount() {
+		this.editor?.destroy()
 	},
 }
 </script>
 
 <style scoped lang="scss">
-.editor__content {
-	max-width: var(--text-editor-max-width);
-	margin: auto;
-	position: relative;
-	width: 100%;
+.editor__content-wrapper {
+	display: flex;
+	flex-grow: 1;
 }
 
-.text-editor__content-wrapper {
-	--side-width: calc((100% - var(--text-editor-max-width)) / 2);
-	display: grid;
-	grid-template-columns: 1fr auto;
-	&.--show-outline {
-		grid-template-columns: var(--side-width) auto var(--side-width);
-	}
-	.text-editor__content-wrapper__left,
-	.text-editor__content-wrapper__right {
-		height: 100%;
-		position: relative;
-	}
+.editor__content {
+	flex-grow: 1;
+	max-width: var(--text-editor-max-width);
+	margin: 0 auto;
+	position: relative;
 }
 </style>

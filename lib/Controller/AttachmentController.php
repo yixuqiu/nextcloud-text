@@ -2,36 +2,23 @@
 
 declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2021 Julien Veyssier <eneiluj@posteo.net>
- *
- * @author Julien Veyssier <eneiluj@posteo.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text\Controller;
 
 use Exception;
+use OCA\Text\Context\ContextManager;
+use OCA\Text\Context\IContext;
+use OCA\Text\Db\DocumentMapper;
 use OCA\Text\Exception\InvalidSessionException;
 use OCA\Text\Exception\UploadException;
 use OCA\Text\Middleware\Attribute\RequireDocumentSession;
 use OCA\Text\Middleware\Attribute\RequireDocumentSessionOrUserOrShareToken;
 use OCA\Text\Service\AttachmentService;
 use OCP\AppFramework\ApiController;
+use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
@@ -39,15 +26,23 @@ use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\DataDownloadResponse;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\RedirectResponse;
+use OCP\Constants;
 use OCP\Files\IMimeTypeDetector;
+use OCP\Files\InvalidPathException;
+use OCP\Files\NotFoundException;
+use OCP\Files\NotPermittedException;
 use OCP\IL10N;
 use OCP\IRequest;
+use OCP\IUser;
+use OCP\Share\Exceptions\ShareNotFound;
+use OCP\Share\IManager as ShareManager;
+use OCP\Share\IShare;
 use OCP\Util;
 use Psr\Log\LoggerInterface;
 
 class AttachmentController extends ApiController implements ISessionAwareController {
 	use TSessionAwareController;
-	public const IMAGE_MIME_TYPES = [
+	public const array IMAGE_MIME_TYPES = [
 		'image/png',
 		'image/jpeg',
 		'image/jpg',
@@ -60,7 +55,7 @@ class AttachmentController extends ApiController implements ISessionAwareControl
 		'image/heic',
 		'image/heif',
 	];
-	public const BROWSER_SUPPORTED_IMAGE_MIME_TYPES = [
+	public const array BROWSER_SUPPORTED_IMAGE_MIME_TYPES = [
 		'image/png',
 		'image/jpeg',
 		'image/jpg',
@@ -78,7 +73,10 @@ class AttachmentController extends ApiController implements ISessionAwareControl
 		private IL10N $l10n,
 		private LoggerInterface $logger,
 		private IMimeTypeDetector $mimeTypeDetector,
-		private AttachmentService $attachmentService
+		private AttachmentService $attachmentService,
+		private ShareManager $shareManager,
+		private DocumentMapper $documentMapper,
+		private ContextManager $contextManager,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -86,21 +84,15 @@ class AttachmentController extends ApiController implements ISessionAwareControl
 	#[NoAdminRequired]
 	#[PublicPage]
 	#[RequireDocumentSessionOrUserOrShareToken]
-	public function getAttachmentList(string $shareToken = ''): DataResponse {
-		$documentId = $this->getDocument()->getId();
+	public function getAttachmentList(int $fileId = 0, string $shareToken = ''): DataResponse {
+		$auth = $this->getAuth($shareToken, false);
+		$context = $this->getContext($auth, $fileId);
 		try {
 			$session = $this->getSession();
 		} catch (InvalidSessionException) {
 			$session = null;
 		}
-
-		if ($shareToken) {
-			$attachments = $this->attachmentService->getAttachmentList($documentId, null, $session, $shareToken);
-		} else {
-			$userId = $this->getUserId();
-			$attachments = $this->attachmentService->getAttachmentList($documentId, $userId, $session);
-		}
-
+		$attachments = $this->attachmentService->getAttachmentList($context, $auth, $session);
 		return new DataResponse($attachments);
 	}
 
@@ -108,10 +100,10 @@ class AttachmentController extends ApiController implements ISessionAwareControl
 	#[PublicPage]
 	#[RequireDocumentSession]
 	public function insertAttachmentFile(string $filePath): DataResponse {
-		$userId = $this->getSession()->getUserId();
-
+		$user = $this->getUser();
+		$context = $this->getContext($user);
 		try {
-			$insertResult = $this->attachmentService->insertAttachmentFile($this->getSession()->getDocumentId(), $filePath, $userId);
+			$insertResult = $this->attachmentService->insertAttachmentFile($context, $filePath, $user);
 			if (isset($insertResult['error'])) {
 				return new DataResponse($insertResult, Http::STATUS_BAD_REQUEST);
 			} else {
@@ -126,9 +118,7 @@ class AttachmentController extends ApiController implements ISessionAwareControl
 	#[NoAdminRequired]
 	#[PublicPage]
 	#[RequireDocumentSession]
-	public function uploadAttachment(string $shareToken = ''): DataResponse {
-		$documentId = $this->getSession()->getDocumentId();
-
+	public function uploadAttachment(string $token = ''): DataResponse {
 		try {
 			$file = $this->getUploadedFile('file');
 			if (isset($file['tmp_name'], $file['name'], $file['type'])) {
@@ -137,12 +127,9 @@ class AttachmentController extends ApiController implements ISessionAwareControl
 					throw new Exception('Could not read file');
 				}
 				$newFileName = $file['name'];
-				if ($shareToken) {
-					$uploadResult = $this->attachmentService->uploadAttachmentPublic($documentId, $newFileName, $newFileResource, $shareToken);
-				} else {
-					$userId = $this->getSession()->getUserId();
-					$uploadResult = $this->attachmentService->uploadAttachment($documentId, $newFileName, $newFileResource, $userId);
-				}
+				$auth = $this->getAuth($token);
+				$context = $this->getContext($auth);
+				$uploadResult = $this->attachmentService->uploadAttachment($context, $newFileName, $newFileResource, $auth);
 				if (isset($uploadResult['error'])) {
 					return new DataResponse($uploadResult, Http::STATUS_BAD_REQUEST);
 				} else {
@@ -150,15 +137,42 @@ class AttachmentController extends ApiController implements ISessionAwareControl
 				}
 			}
 			return new DataResponse(['error' => 'No uploaded file'], Http::STATUS_BAD_REQUEST);
+		} catch (InvalidPathException $e) {
+			$this->logger->error('Upload error', ['exception' => $e]);
+			$error = $e->getMessage() ?: 'Upload error';
+			return new DataResponse(['error' => $error], Http::STATUS_BAD_REQUEST);
 		} catch (Exception $e) {
 			$this->logger->error('Upload error', ['exception' => $e]);
 			return new DataResponse(['error' => 'Upload error'], Http::STATUS_BAD_REQUEST);
 		}
 	}
 
+	#[NoAdminRequired]
+	#[PublicPage]
+	#[RequireDocumentSession]
+	public function createAttachment(): DataResponse {
+		$user = $this->getUser();
+		$context = $this->getContext($user);
+		try {
+			$newFileName = $this->request->getParam('fileName', 'text.md');
+			$createResult = $this->attachmentService->createAttachmentFile($context, $newFileName, $user);
+			if (isset($createResult['error'])) {
+				return new DataResponse($createResult, Http::STATUS_BAD_REQUEST);
+			} else {
+				return new DataResponse($createResult);
+			}
+		} catch (InvalidPathException $e) {
+			$this->logger->error('File creation error', ['exception' => $e]);
+			$error = $e->getMessage() ?: 'Upload error';
+			return new DataResponse(['error' => $error], Http::STATUS_BAD_REQUEST);
+		} catch (Exception $e) {
+			$this->logger->error('File creation error', ['exception' => $e]);
+			return new DataResponse(['error' => 'File creation error'], Http::STATUS_BAD_REQUEST);
+		}
+	}
+
 	private function getUploadedFile(string $key): array {
 		$file = $this->request->getUploadedFile($key);
-		$error = null;
 		$phpFileUploadErrors = [
 			UPLOAD_ERR_OK => $this->l10n->t('The file was uploaded'),
 			UPLOAD_ERR_INI_SIZE => $this->l10n->t('The uploaded file exceeds the upload_max_filesize directive in php.ini'),
@@ -170,13 +184,12 @@ class AttachmentController extends ApiController implements ISessionAwareControl
 			UPLOAD_ERR_EXTENSION => $this->l10n->t('A PHP extension stopped the file upload'),
 		];
 
-		if (empty($file)) {
+		if ($file === null || empty($file)) {
 			$error = $this->l10n->t('No file uploaded or file size exceeds maximum of %s', [Util::humanFileSize(Util::uploadLimit())]);
+			throw new UploadException($error);
 		}
-		if (!empty($file) && array_key_exists('error', $file) && $file['error'] !== UPLOAD_ERR_OK) {
+		if (array_key_exists('error', $file) && $file['error'] !== UPLOAD_ERR_OK) {
 			$error = $phpFileUploadErrors[$file['error']];
-		}
-		if ($error !== null) {
 			throw new UploadException($error);
 		}
 		return $file;
@@ -193,24 +206,27 @@ class AttachmentController extends ApiController implements ISessionAwareControl
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[RequireDocumentSessionOrUserOrShareToken]
-	public function getImageFile(string $imageFileName, string $shareToken = '',
-		int $preferRawImage = 0): DataResponse|DataDownloadResponse {
-		$documentId = $this->getDocument()->getId();
-
+	public function getImageFile(
+		string $imageFileName,
+		string $shareToken = '',
+		int $preferRawImage = 0,
+		int $fileId = 0,
+	): DataResponse|DataDownloadResponse {
 		try {
-			if ($shareToken) {
-				$imageFile = $this->attachmentService->getImageFilePublic($documentId, $imageFileName, $shareToken, $preferRawImage === 1);
-			} else {
-				$userId = $this->getUserId();
-				$imageFile = $this->attachmentService->getImageFile($documentId, $imageFileName, $userId, $preferRawImage === 1);
-			}
-			return $imageFile !== null
-				? new DataDownloadResponse(
+			$auth = $this->getAuth($shareToken, false);
+			$context = $this->getContext($auth, $fileId);
+			$imageFile = $this->attachmentService->getImageFile($context, $imageFileName, $preferRawImage === 1, $auth);
+			if ($imageFile !== null) {
+				$response = new DataDownloadResponse(
 					$imageFile->getContent(),
 					$imageFile->getName(),
 					$this->getSecureMimeType($imageFile->getMimeType())
-				)
-				: new DataResponse('', Http::STATUS_NOT_FOUND);
+				);
+				$response->cacheFor(3600 * 24, false, true);
+				return $response;
+			}
+
+			return  new DataResponse('', Http::STATUS_NOT_FOUND);
 		} catch (Exception $e) {
 			$this->logger->error('getImageFile error', ['exception' => $e]);
 			return new DataResponse('', Http::STATUS_NOT_FOUND);
@@ -228,16 +244,15 @@ class AttachmentController extends ApiController implements ISessionAwareControl
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[RequireDocumentSessionOrUserOrShareToken]
-	public function getMediaFile(string $mediaFileName, string $shareToken = ''): DataResponse|DataDownloadResponse {
-		$documentId = $this->getDocument()->getId();
-
+	public function getMediaFile(
+		string $mediaFileName,
+		string $shareToken = '',
+		int $fileId = 0,
+	): DataResponse|DataDownloadResponse {
 		try {
-			if ($shareToken) {
-				$mediaFile = $this->attachmentService->getMediaFilePublic($documentId, $mediaFileName, $shareToken);
-			} else {
-				$userId = $this->getUserId();
-				$mediaFile = $this->attachmentService->getMediaFile($documentId, $mediaFileName, $userId);
-			}
+			$auth = $this->getAuth($shareToken, false);
+			$context = $this->getContext($auth, $fileId);
+			$mediaFile = $this->attachmentService->getMediaFile($context, $mediaFileName, $auth);
 			return $mediaFile !== null
 				? new DataDownloadResponse(
 					$mediaFile->getContent(),
@@ -259,16 +274,11 @@ class AttachmentController extends ApiController implements ISessionAwareControl
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[RequireDocumentSessionOrUserOrShareToken]
-	public function getMediaFilePreview(string $mediaFileName, string $shareToken = '') {
-		$documentId = $this->getDocument()->getId();
-
+	public function getMediaFilePreview(string $mediaFileName, string $shareToken = '', int $fileId = 0) {
 		try {
-			if ($shareToken) {
-				$preview = $this->attachmentService->getMediaFilePreviewPublic($documentId, $mediaFileName, $shareToken);
-			} else {
-				$userId = $this->getUserId();
-				$preview = $this->attachmentService->getMediaFilePreview($documentId, $mediaFileName, $userId);
-			}
+			$auth = $this->getAuth($shareToken, false);
+			$context = $this->getContext($auth, $fileId);
+			$preview = $this->attachmentService->getMediaFilePreview($context, $mediaFileName);
 			if ($preview === null) {
 				return new DataResponse('', Http::STATUS_NOT_FOUND);
 			}
@@ -285,6 +295,55 @@ class AttachmentController extends ApiController implements ISessionAwareControl
 			$this->logger->error('getMediaFilePreview error', ['exception' => $e]);
 		}
 		return new DataResponse('', Http::STATUS_NOT_FOUND);
+	}
+
+	private function getContext(IShare|IUser $auth, int $fileId = 0): IContext {
+		try {
+			$documentId = $this->getDocumentId();
+		} catch (InvalidSessionException $e) {
+			// Fallback for scenarios without a session. (MarkdownContentEditor with fileId)
+			return $this->contextManager->getContext('file', $fileId, $auth);
+		}
+		try {
+			$document = $this->documentMapper->find($documentId);
+		} catch (DoesNotExistException $e) {
+			throw new NotFoundException('Text file for document '
+				. $documentId
+				. ' was not found.', 0, $e);
+		}
+		$type = $document->getContextType();
+		$id = $document->getContextId();
+		return $this->contextManager->getContext($type, $id, $auth);
+	}
+
+	private function getAuth(string $shareToken, bool $updatePermissionRequired = true): IShare|IUser {
+		if ($shareToken !== '') {
+			try {
+				$share = $this->shareManager->getShareByToken($shareToken);
+				if ($updatePermissionRequired && !$this->hasUpdatePermissions($share)) {
+					throw new NotPermittedException('No write permissions');
+				}
+				return $share;
+			} catch (ShareNotFound) {
+				throw new InvalidSessionException();
+			}
+		} else {
+			return $this->getUser();
+		}
+	}
+
+	/**
+	 * Check if the shared access has write permissions
+	 */
+	private function hasUpdatePermissions(IShare $share): bool {
+		return (
+			in_array(
+				$share->getShareType(),
+				[IShare::TYPE_LINK, IShare::TYPE_EMAIL, IShare::TYPE_ROOM],
+				true
+			)
+			&& $share->getPermissions() & Constants::PERMISSION_UPDATE
+			&& $share->getNode()->getPermissions() & Constants::PERMISSION_UPDATE);
 	}
 
 	/**

@@ -1,0 +1,69 @@
+<!--
+  - SPDX-FileCopyrightText: 2025 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
+<template>
+	<!-- desktop -->
+	<div v-if="!isMobile" class="editor__toc-container">
+		<div class="editor__toc-content">
+			<TocOutline
+				v-if="!displayToc && headings.length > 1"
+				@showToc="setDisplayToc(true)" />
+			<TocDesktop v-else-if="displayToc" @close="setDisplayToc(false)">
+				<TableOfContents />
+			</TocDesktop>
+		</div>
+	</div>
+
+	<!-- mobile -->
+	<TocMobile v-else-if="displayToc" @close="setDisplayToc(false)">
+		<TableOfContents
+			:showClose="false"
+			@headingClicked="setDisplayToc(false)" />
+	</TocMobile>
+</template>
+
+<script setup>
+import { emit } from '@nextcloud/event-bus'
+import { useIsMobile } from '@nextcloud/vue/composables/useIsMobile'
+import TableOfContents from './TableOfContents.vue'
+import TocDesktop from './TocDesktop.vue'
+import TocMobile from './TocMobile.vue'
+import TocOutline from './TocOutline.vue'
+import { useEditorHeadings } from '../../../composables/useEditorHeadings.ts'
+import { provideIntersectionObserver } from '../../../composables/useVisibility.ts'
+
+provideIntersectionObserver()
+const { displayToc, headings } = useEditorHeadings()
+const isMobile = useIsMobile()
+/**
+ *
+ * @param {boolean} visible - desired visibility
+ */
+function setDisplayToc(visible) {
+	emit('text:toc:toggle', { visible })
+}
+</script>
+
+<style lang="scss" scoped>
+.editor__toc-container {
+	position: absolute;
+	top: 0;
+	inset-inline-end: 0;
+	max-width: 40px;
+	width: 40px;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+}
+
+.editor__toc-content {
+	position: sticky;
+	// Toolbar height + 34px
+	top: calc(var(--default-clickable-area) + 9px + 34px);
+	margin-top: calc(var(--default-clickable-area) + 9px + 34px);
+	margin-inline-end: 12px;
+}
+</style>

@@ -1,24 +1,8 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text\Db;
@@ -53,7 +37,7 @@ class SessionMapper extends QBMapper {
 	 * @return Session
 	 * @throws DoesNotExistException
 	 */
-	public function find(int $documentId, int $sessionId, string $token): Session {
+	public function find(string $documentId, int $sessionId, string $token): Session {
 		/* @var $qb IQueryBuilder */
 		$qb = $this->db->getQueryBuilder();
 		$result = $qb->select('*')
@@ -63,7 +47,7 @@ class SessionMapper extends QBMapper {
 			->andWhere($qb->expr()->eq('token', $qb->createNamedParameter($token)))
 			->executeQuery();
 
-		$data = $result->fetch();
+		$data = $result->fetchAssociative();
 		$result->closeCursor();
 		if ($data === false) {
 			throw new DoesNotExistException('Session is invalid');
@@ -76,7 +60,7 @@ class SessionMapper extends QBMapper {
 	 *
 	 * @psalm-return array<Session>
 	 */
-	public function findAll(int $documentId): array {
+	public function findAll(string $documentId): array {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('id', 'color', 'document_id', 'last_awareness_message', 'last_contact', 'user_id', 'guest_name')
 			->from($this->getTableName())
@@ -85,12 +69,23 @@ class SessionMapper extends QBMapper {
 		return $this->findEntities($qb);
 	}
 
+	public function countAll(string $documentId): int {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('id', 'color', 'document_id', 'last_awareness_message', 'last_contact', 'user_id', 'guest_name')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('document_id', $qb->createNamedParameter($documentId)));
+		$result = $qb->executeQuery();
+		$count = (int)$result->fetchOne();
+		$result->closeCursor();
+		return $count;
+	}
+
 	/**
 	 * @return Session[]
 	 *
 	 * @psalm-return array<Session>
 	 */
-	public function findAllActive(int $documentId): array {
+	public function findAllActive(string $documentId): array {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('id', 'color', 'document_id', 'last_awareness_message', 'last_contact', 'user_id', 'guest_name')
 			->from($this->getTableName())
@@ -114,7 +109,7 @@ class SessionMapper extends QBMapper {
 		return $this->findEntities($qb);
 	}
 
-	public function deleteInactiveWithoutSteps(?int $documentId = null): int {
+	public function deleteInactiveWithoutSteps(?string $documentId = null): int {
 		$lastContact = time() - SessionService::SESSION_VALID_TIME;
 
 		$inactiveSessionBuilder = $this->db->getQueryBuilder();
@@ -127,9 +122,7 @@ class SessionMapper extends QBMapper {
 			$inactiveSessionBuilder->andWhere($inactiveSessionBuilder->expr()->eq('s.document_id', $inactiveSessionBuilder->createNamedParameter($documentId)));
 		}
 		$result = $inactiveSessionBuilder->executeQuery();
-		$documentIds = array_map(function ($row) {
-			return (int)$row['id'];
-		}, $result->fetchAll());
+		$documentIds = array_map(fn ($row) => (int)$row['id'], $result->fetchAllAssociative());
 		$result->closeCursor();
 
 		$chunks = array_chunk($documentIds, 500);
@@ -147,14 +140,97 @@ class SessionMapper extends QBMapper {
 		return $deletedCount;
 	}
 
-	public function deleteByDocumentId(int $documentId): int {
+	public function deleteOldSessions(int $ageInSeconds): int {
+		$startTime = microtime(true);
+		$maxExecutionSeconds = 30;
+		$batchSize = 1000;
+		$deletedCount = 0;
+		$ageThreshold = time() - $ageInSeconds;
+
+		do {
+			$oldSessionsQb = $this->db->getQueryBuilder();
+			$result = $oldSessionsQb->select('id')
+				->from('text_sessions')
+				->where($oldSessionsQb->expr()->lt('last_contact', $oldSessionsQb->createNamedParameter($ageThreshold)))
+				->setMaxResults($batchSize)
+				->executeQuery();
+
+			$sessionIds = array_map(fn ($row) => (int)$row['id'], $result->fetchAllAssociative());
+			$result->closeCursor();
+
+			if (empty($sessionIds)) {
+				break;
+			}
+
+			$deleteSessionsQb = $this->db->getQueryBuilder();
+			$batchDeleted = $deleteSessionsQb->delete('text_sessions')
+				->where($deleteSessionsQb->expr()->in('id', $deleteSessionsQb->createParameter('ids'), IQueryBuilder::PARAM_INT_ARRAY))
+				->setParameter('ids', $sessionIds, IQueryBuilder::PARAM_INT_ARRAY)
+				->executeStatement();
+
+			$deletedCount += $batchDeleted;
+		} while ((microtime(true) - $startTime) < $maxExecutionSeconds);
+
+		return $deletedCount;
+	}
+
+	public function deleteOrphanedSteps(int $ageInSeconds): int {
+		$startTime = microtime(true);
+		$maxExecutionSeconds = 30;
+		$batchSize = 1000;
+		$deletedCount = 0;
+		$ageThreshold = time() - $ageInSeconds;
+
+		do {
+			$orphanedStepsQb = $this->db->getQueryBuilder();
+			$orphanedStepsQb->select('st.id')
+				->from('text_steps', 'st')
+				->leftJoin('st', 'text_sessions', 's', $orphanedStepsQb->expr()->eq('st.document_id', 's.document_id'))
+				->leftJoin('st', 'text_documents', 'd', $orphanedStepsQb->expr()->eq('st.document_id', 'd.id'))
+				->where($orphanedStepsQb->expr()->isNull('s.id'))
+				->andWhere($orphanedStepsQb->expr()->lt('st.timestamp', $orphanedStepsQb->createNamedParameter($ageThreshold)))
+				->andWhere(
+					$orphanedStepsQb->expr()->orX(
+						$orphanedStepsQb->expr()->isNull('d.id'),
+						$orphanedStepsQb->expr()->lt('st.id', 'd.last_saved_version')
+					)
+				)
+				->setMaxResults($batchSize);
+
+			$result = $orphanedStepsQb->executeQuery();
+			$stepIds = array_map(fn ($row) => (int)$row['id'], $result->fetchAllAssociative());
+			$result->closeCursor();
+
+			if (empty($stepIds)) {
+				break;
+			}
+
+			$deleteQb = $this->db->getQueryBuilder();
+			$batchDeleted = $deleteQb->delete('text_steps')
+				->where($deleteQb->expr()->in('id', $deleteQb->createParameter('ids'), IQueryBuilder::PARAM_INT_ARRAY))
+				->setParameter('ids', $stepIds, IQueryBuilder::PARAM_INT_ARRAY)
+				->executeStatement();
+
+			$deletedCount += $batchDeleted;
+		} while ((microtime(true) - $startTime) < $maxExecutionSeconds);
+
+		return $deletedCount;
+	}
+
+	public function deleteByDocumentId(string $documentId): int {
 		$qb = $this->db->getQueryBuilder();
 		$qb->delete($this->getTableName())
 			->where($qb->expr()->eq('document_id', $qb->createNamedParameter($documentId)));
 		return $qb->executeStatement();
 	}
 
-	public function isUserInDocument(int $documentId, string $userId): bool {
+	public function clearAll(): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->delete($this->getTableName())
+			->executeStatement();
+	}
+
+	public function isUserInDocument(string $documentId, string $userId): bool {
 		$qb = $this->db->getQueryBuilder();
 		$result = $qb->select('*')
 			->from($this->getTableName())
@@ -163,7 +239,7 @@ class SessionMapper extends QBMapper {
 			->setMaxResults(1)
 			->executeQuery();
 
-		$data = $result->fetch();
+		$data = $result->fetchAssociative();
 		$result->closeCursor();
 		if ($data === false) {
 			return false;

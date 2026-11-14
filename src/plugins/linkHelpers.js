@@ -1,23 +1,6 @@
 /**
- * @copyright Copyright (c) 2024 Max <max@nextcloud.com>
- *
- * @author Max <max@nextcloud.com>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 import { isLinkToSelfWithHash } from '../helpers/links.js'
@@ -32,8 +15,8 @@ import { isLinkToSelfWithHash } from '../helpers/links.js'
 export function activeLinkFromSelection({ selection, doc }) {
 	// support for CellSelections
 	const { ranges } = selection
-	const from = Math.min(...ranges.map(range => range.$from.pos))
-	const to = Math.max(...ranges.map(range => range.$to.pos))
+	const from = Math.min(...ranges.map((range) => range.$from.pos))
+	const to = Math.max(...ranges.map((range) => range.$to.pos))
 
 	const resolved = doc.resolve(from)
 
@@ -61,21 +44,38 @@ export function activeLinkFromSelection({ selection, doc }) {
 }
 
 /**
+ * Active link object for the inline node starting at the given position
+ *
+ * @param {object} doc - the prosemirror document
+ * @param {number} pos  - position right before the node
+ */
+export function activeLinkAtPos(doc, pos) {
+	const resolved = doc.resolve(pos)
+	// ignore links in previews
+	if (resolved.parent.type.name === 'preview') {
+		return null
+	}
+	return activeLink(resolved.nodeAfter, pos)
+}
+
+/**
  * Active link object for the given node and nodeStart
+ *
  * @param {object} node - node to check
  * @param {number} nodeStart - offset in the document
  */
-function activeLink(node, nodeStart) {
+export function activeLink(node, nodeStart) {
 	const mark = linkMark(node)
 	return mark ? { mark, nodeStart } : null
 }
 
 /**
  * Get the link mark for the given node
+ *
  * @param {object} node - node to check
  */
 function linkMark(node) {
-	const linkMark = node?.marks.find(m => m.type.name === 'link')
+	const linkMark = node?.marks.find((m) => m.type.name === 'link')
 	if (!linkMark) {
 		return undefined
 	}

@@ -2,36 +2,23 @@
 
 declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text\Controller;
 
+use OCA\Text\Context\FileContextFactory;
 use OCA\Text\Middleware\Attribute\RequireDocumentBaseVersionEtag;
 use OCA\Text\Middleware\Attribute\RequireDocumentSession;
 use OCA\Text\Service\ApiService;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\PublicShareController;
+use OCP\Files\NotFoundException;
+use OCP\Files\NotPermittedException;
 use OCP\IRequest;
 use OCP\ISession;
 use OCP\Share\Exceptions\ShareNotFound;
@@ -47,8 +34,9 @@ class PublicSessionController extends PublicShareController implements ISessionA
 		string $appName,
 		IRequest $request,
 		ISession $session,
+		private FileContextFactory $fileContextFactory,
 		private ShareManager $shareManager,
-		private ApiService $apiService
+		private ApiService $apiService,
 	) {
 		parent::__construct($appName, $request, $session);
 	}
@@ -69,7 +57,7 @@ class PublicSessionController extends PublicShareController implements ISessionA
 		try {
 			$this->share = $this->shareManager->getShareByToken($this->getToken());
 			return true;
-		} catch (ShareNotFound $e) {
+		} catch (ShareNotFound) {
 			return false;
 		}
 	}
@@ -81,47 +69,57 @@ class PublicSessionController extends PublicShareController implements ISessionA
 
 	#[NoAdminRequired]
 	#[PublicPage]
-	public function create(string $token, ?string $file = null, ?string $baseVersionEtag = null, ?string $guestName = null): DataResponse {
-		return $this->apiService->create(null, $file, $baseVersionEtag, $token, $guestName);
+	public function create(string $token, ?string $filePath = null, ?string $baseVersionEtag = null, ?string $guestName = null): DataResponse {
+		try {
+			$share = $this->shareManager->getShareByToken($token);
+		} catch (ShareNotFound) {
+			return new DataResponse([], Http::STATUS_NOT_FOUND);
+		}
+		try {
+			$context = $this->fileContextFactory->buildForShareWithPath($share, $filePath);
+			return $this->apiService->create($context, $baseVersionEtag, $guestName);
+		} catch (NotFoundException|\InvalidArgumentException) {
+			return new DataResponse([], Http::STATUS_NOT_FOUND);
+		} catch (NotPermittedException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_FORBIDDEN);
+		}
 	}
 
 	#[NoAdminRequired]
 	#[PublicPage]
-	public function close(int $documentId, int $sessionId, string $sessionToken): DataResponse {
-		return $this->apiService->close($documentId, $sessionId, $sessionToken);
-	}
-
-	#[NoAdminRequired]
-	#[PublicPage]
-	#[RequireDocumentBaseVersionEtag]
-	#[RequireDocumentSession]
-	public function push(int $documentId, int $sessionId, string $sessionToken, int $version, array $steps, string $awareness, string $token): DataResponse {
-		return $this->apiService->push($this->getSession(), $this->getDocument(), $version, $steps, $awareness, $token);
-	}
-
-	#[NoAdminRequired]
-	#[PublicPage]
-	#[RequireDocumentBaseVersionEtag]
-	#[RequireDocumentSession]
-	public function sync(string $token, int $version = 0): DataResponse {
-		return $this->apiService->sync($this->getSession(), $this->getDocument(), $version, $token);
+	public function close(string $documentId, int $sessionId, string $sessionToken): DataResponse {
+		return $this->apiService->close($documentId, $sessionId, $sessionToken, $this->getShare());
 	}
 
 	#[NoAdminRequired]
 	#[PublicPage]
 	#[RequireDocumentBaseVersionEtag]
 	#[RequireDocumentSession]
-	public function save(string $token, int $version = 0, ?string $autosaveContent = null, ?string $documentState = null, bool $force = false, bool $manualSave = false): DataResponse {
-		return $this->apiService->save($this->getSession(), $this->getDocument(), $version, $autosaveContent, $documentState, $force, $manualSave, $token);
+	public function push(int $version, array $steps, string $awareness, ?int $recoveryAttempt = null): DataResponse {
+		return $this->apiService->push($this->getSession(), $this->getDocument(), $version, $steps, $awareness, $recoveryAttempt, $this->getShare());
 	}
 
-	/**
-	 * @psalm-return DataResponse<int, array|null|object|scalar, array<string, mixed>>
-	 */
+	#[NoAdminRequired]
+	#[PublicPage]
+	#[RequireDocumentBaseVersionEtag]
+	#[RequireDocumentSession]
+	public function sync(int $version = 0): DataResponse {
+		return $this->apiService->sync($this->getDocument(), $this->getShare(), $version);
+	}
+
+	#[NoAdminRequired]
+	#[PublicPage]
+	#[RequireDocumentBaseVersionEtag]
+	#[RequireDocumentSession]
+	public function save(int $version, string $autosaveContent, string $documentState, bool $force = false, bool $manualSave = false): DataResponse {
+		return $this->apiService->save($this->getDocument(), $this->getShare(), $version, $autosaveContent, $documentState, $force, $manualSave);
+	}
+
 	#[NoAdminRequired]
 	#[PublicPage]
 	#[RequireDocumentSession]
 	public function updateSession(string $guestName): DataResponse {
 		return $this->apiService->updateSession($this->getSession(), $guestName);
 	}
+
 }

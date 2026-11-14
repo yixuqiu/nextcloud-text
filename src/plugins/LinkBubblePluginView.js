@@ -1,10 +1,14 @@
-import { VueRenderer } from '@tiptap/vue-2'
+/**
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+import { VueRenderer } from '@tiptap/vue-3'
 import tippy from 'tippy.js'
-import { domHref } from '../helpers/links.js'
 import LinkBubbleView from '../components/Link/LinkBubbleView.vue'
+import { domHref } from '../helpers/links.js'
 
 class LinkBubblePluginView {
-
 	#component = null
 	#editor = null
 
@@ -16,29 +20,19 @@ class LinkBubblePluginView {
 	}
 
 	addEventListeners() {
-		this.view.dom.addEventListener('dragstart',
-			this.closeOnExternalEvents,
-		)
-		document.addEventListener('mousedown',
-			this.closeOnExternalEvents,
-		)
-		document.addEventListener('scroll',
-			this.closeOnExternalEvents,
-			{ capture: true },
-		)
+		this.view.dom.addEventListener('dragstart', this.closeOnExternalEvents)
+		document.addEventListener('mousedown', this.closeOnExternalEvents)
+		document.addEventListener('scroll', this.closeOnExternalEvents, {
+			capture: true,
+		})
 	}
 
 	removeEventListeners() {
-		this.view.dom.removeEventListener('dragstart',
-			this.closeOnExternalEvents,
-		)
-		document.removeEventListener('mousedown',
-			this.closeOnExternalEvents,
-		)
-		document.removeEventListener('scroll',
-			this.closeOnExternalEvents,
-			{ capture: true },
-		)
+		this.view.dom.removeEventListener('dragstart', this.closeOnExternalEvents)
+		document.removeEventListener('mousedown', this.closeOnExternalEvents)
+		document.removeEventListener('scroll', this.closeOnExternalEvents, {
+			capture: true,
+		})
 	}
 
 	closeOnExternalEvents = (event) => {
@@ -64,11 +58,14 @@ class LinkBubblePluginView {
 		}
 
 		this.#component ||= new VueRenderer(LinkBubbleView, {
-			parent: this.options.parent,
-			propsData: {
+			parent: this.options.editor.contentComponent,
+			props: {
 				editor: this.options.editor,
 				href: null,
+				nodeStart: null,
+				focusInput: false,
 			},
+			editor: this.options.editor,
 		})
 
 		this.tippy = tippy(editorElement, {
@@ -79,55 +76,63 @@ class LinkBubblePluginView {
 			trigger: 'manual',
 			placement: 'bottom',
 			hideOnClick: 'toggle',
-			popperOptions: {
-				strategy: 'fixed',
-			},
 		})
 	}
 
-	update(view, oldState) {
-		const { active } = this.plugin.getState(view.state)
-		const { active: oldActive } = this.plugin.getState(oldState)
+	#timer = null
+
+	update(view) {
+		const { active, focusInput } = this.plugin.getState(view.state)
 		if (view.composing) {
 			return
 		}
-		if (active === oldActive) {
-			return
-		}
 		this.createTooltip()
+		clearTimeout(this.#timer)
 		if (active?.mark) {
-			this.updateTooltip(view, active)
+			this.#timer = setTimeout(() => {
+				this.updateTooltip(view, active, focusInput)
+			}, 100)
 		} else {
-			setTimeout(() => {
+			this.removeEventListeners()
+			this.#timer = setTimeout(() => {
 				this.tippy?.hide()
 			}, 100)
-			this.removeEventListeners()
 		}
 	}
 
-	updateTooltip(view, { mark, nodeStart }) {
-		let referenceEl = view.nodeDOM(nodeStart)
+	updateTooltip(view, { mark, nodeStart }, focusInput = false) {
+		let referenceEl
+		try {
+			referenceEl = view.nodeDOM(nodeStart)
+		} catch {
+			// Prevent throwing error at rerouting in `openLink()`
+			return
+		}
 		if (Object.prototype.toString.call(referenceEl) === '[object Text]') {
 			referenceEl = referenceEl.parentElement
 		}
-		const clientRect = referenceEl?.getBoundingClientRect()
 
 		this.#component?.updateProps({
 			href: domHref(mark),
+			nodeStart,
+			focusInput,
 		})
 
-		this.tippy?.setProps({
-			getReferenceClientRect: () => clientRect,
-		})
+		const clientRect = referenceEl?.getBoundingClientRect()
+		if (clientRect) {
+			this.tippy?.setProps({
+				getReferenceClientRect: () => clientRect,
+			})
+		}
 
 		this.tippy?.show()
 		this.addEventListeners()
 	}
 
 	destroy() {
+		clearTimeout(this.#timer)
 		this.tippy?.destroy()
 	}
-
 }
 
 export default LinkBubblePluginView

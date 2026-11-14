@@ -1,54 +1,45 @@
 <!--
-  - @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
-  -
-  - @author Julius Härtl <jus@bitgrid.net>
-  -
-  - @license AGPL-3.0-or-later
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -
-  -->
+  - SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
-	<div id="direct-editor" :class="{'icon-loading': saving}">
-		<Editor ref="editor"
-			:initial-session="initialSession"
-			:file-id="initial.fileId"
-			:active="true"
+	<div id="direct-editor" :class="{ 'icon-loading': saving }">
+		<EditorReloader
+			ref="editor"
+			:initialSession
+			:context
+			active
+			autofocus
 			:mime="initial.mimetype"
-			:is-direct-editing="true"
-			@ready="loaded">
+			isDirectEditing
+			@ready="loaded"
+			@push:forbidden="onPushForbidden">
 			<template v-if="isMobile" #header>
 				<button class="icon-share" @click="share" />
 				<button class="icon-close" @click="close" />
 			</template>
-		</Editor>
+		</EditorReloader>
 	</div>
 </template>
 
 <script>
-import Vue from 'vue'
-import Editor from '../components/Editor.vue'
+import { reactive } from 'vue'
+import EditorReloader from '../components/EditorReloader.vue'
+import { logger } from '../helpers/logger.ts'
 
-import { logger } from '../helpers/logger.js'
-
-const log = Vue.observable({
+const log = reactive({
 	messages: [],
 	mtime: 0,
 })
 
-const callMobileMessage = (messageName, attributes) => {
+/**
+ * Send a message to the host app
+ *
+ * @param {string} messageName name of the message
+ * @param {object} attributes attributes to send
+ */
+function callMobileMessage(messageName, attributes) {
 	logger.debug(`callMobileMessage ${messageName}`, { attributes })
 	let message = messageName
 	if (typeof attributes !== 'undefined') {
@@ -60,12 +51,15 @@ const callMobileMessage = (messageName, attributes) => {
 	let attributesString = null
 	try {
 		attributesString = JSON.stringify(attributes)
-	} catch (e) {
-		attributesString = null
+	} catch {
+		/* Continue without attributeString null */
 	}
 
 	// Forward to mobile handler
-	if (window.DirectEditingMobileInterface && typeof window.DirectEditingMobileInterface[messageName] === 'function') {
+	if (
+		window.DirectEditingMobileInterface
+		&& typeof window.DirectEditingMobileInterface[messageName] === 'function'
+	) {
 		if (attributesString === null || typeof attributesString === 'undefined') {
 			window.DirectEditingMobileInterface[messageName]()
 		} else {
@@ -74,9 +68,11 @@ const callMobileMessage = (messageName, attributes) => {
 	}
 
 	// iOS webkit fallback
-	if (window.webkit
+	if (
+		window.webkit
 		&& window.webkit.messageHandlers
-		&& window.webkit.messageHandlers.DirectEditingMobileInterface) {
+		&& window.webkit.messageHandlers.DirectEditingMobileInterface
+	) {
 		window.webkit.messageHandlers.DirectEditingMobileInterface.postMessage(message)
 	}
 
@@ -90,7 +86,7 @@ window.addEventListener('message', function(message) {
 
 export default {
 	name: 'DirectEditing',
-	components: { Editor },
+	components: { EditorReloader },
 	data() {
 		return {
 			initial: OCP.InitialState.loadState('text', 'file'),
@@ -99,93 +95,126 @@ export default {
 			saving: false,
 		}
 	},
+
 	computed: {
 		initialSession() {
 			return JSON.parse(this.initial.session) || null
 		},
+
 		isMobile() {
-			return (window.DirectEditingMobileInterface || (window.webkit
-				&& window.webkit.messageHandlers
-				&& window.webkit.messageHandlers.DirectEditingMobileInterface))
+			return (
+				window.DirectEditingMobileInterface
+				|| (window.webkit
+					&& window.webkit.messageHandlers
+					&& window.webkit.messageHandlers.DirectEditingMobileInterface)
+			)
+		},
+
+		context() {
+			return {
+				id: this.initial.fileId,
+				type: 'file',
+			}
 		},
 	},
+
 	beforeMount() {
 		callMobileMessage('loading')
 	},
+
 	mounted() {
-		document.querySelector('meta[name="viewport"]').setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0')
+		document
+			.querySelector('meta[name="viewport"]')
+			.setAttribute(
+				'content',
+				'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0',
+			)
 	},
+
 	methods: {
 		async close() {
 			this.saving = true
-			setTimeout(async () => {
-				await this.$refs.editor.$destroy()
-				callMobileMessage('close')
-			}, 0)
+			const timeout = new Promise((resolve) => setTimeout(resolve, 2000))
+			await Promise.any([timeout, this.$refs.editor.saveWhenDirty?.()])
+			await this.$refs.editor.close?.()
+			callMobileMessage('close')
 		},
+
 		share() {
 			callMobileMessage('share')
 		},
+
 		loaded() {
 			callMobileMessage('loaded')
+		},
+
+		reload() {
+			callMobileMessage('reload')
+		},
+
+		onPushForbidden() {
+			logger.warn('push was forbidden due to invalidated session')
+			this.reload()
 		},
 	},
 }
 </script>
 
 <style lang="scss">
-	body {
-		position: fixed;
-		background-color: var(--color-main-background);
-	}
+body {
+	position: fixed;
+	background-color: var(--color-main-background);
+}
 
-	#content[class=app-public] {
-		margin: 0;
-		margin-top: 0;
-	}
+#content[class='app-public'] {
+	margin: 0;
+	margin-top: 0;
+}
 </style>
 
 <style scoped lang="scss">
-	#direct-editor {
-		width: 100%;
+#direct-editor {
+	width: 100%;
+	height: 100%;
+	position: fixed;
+	overflow: auto;
+
+	&:deep(.text-editor) {
 		height: 100%;
-		position: fixed;
-		overflow: auto;
-
-		&:deep(.text-editor) {
-			height: 100%;
-			top: 0;
-		}
-		&:deep(.text-editor__wrapper div.ProseMirror) {
-			margin-top: 0;
-		}
+		top: 0;
 	}
+	&:deep(.text-editor__wrapper div.ProseMirror) {
+		margin-top: 0;
+	}
+}
 
-	pre {
-		width: 100%;
-		max-width: 700px;
-		margin: auto;
+pre {
+	width: 100%;
+	max-width: 700px;
+	margin: auto;
+	background-color: var(--color-background-dark);
+}
+
+button {
+	width: var(--default-clickable-area);
+	height: var(--default-clickable-area);
+	margin: 0;
+	background-size: 16px;
+	border: 0;
+	background-color: transparent;
+	opacity: 0.5;
+	color: var(--color-main-text);
+	background-position: center center;
+	vertical-align: top;
+	&:hover,
+	&:focus,
+	&:active {
 		background-color: var(--color-background-dark);
 	}
-
-	button {
-		width: 44px;
-		height: 44px;
-		margin: 0;
-		background-size: 16px;
-		border: 0;
-		background-color: transparent;
-		opacity: .5;
-		color: var(--color-main-text);
-		background-position: center center;
-		vertical-align: top;
-		&:hover, &:focus, &:active {
-			background-color: var(--color-background-dark);
-		}
-		&.is-active,
-		&:hover,
-		&:focus {
-			opacity: 1;
-		}
+	&.is-active,
+	&:hover,
+	&:focus {
+		opacity: 1;
 	}
+}
 </style>

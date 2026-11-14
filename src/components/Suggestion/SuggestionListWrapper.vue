@@ -1,24 +1,7 @@
 <!--
-  - @copyright Copyright (c) 2021 Jonas <jonas@freesources.org>
-  -
-  - @author Jonas <jonas@freesources.org>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -
-  -->
+  - SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
 	<div class="suggestion-list">
@@ -27,12 +10,20 @@
 				<div v-if="hasGroups" class="suggestion-list__group">
 					{{ key }}
 				</div>
-				<div v-for="(item, index) in groupItems"
+				<div
+					v-for="(item, index) in groupItems"
 					:key="combineIndex(groupIndex, index)"
 					class="suggestion-list__item"
-					:class="{ 'is-selected': combineIndex(groupIndex, index) === selectedIndex }"
+					:class="{
+						'is-selected':
+							combineIndex(groupIndex, index) === selectedIndex,
+					}"
 					@click="selectItem(combineIndex(groupIndex, index))">
-					<slot :item="item" :active="combineIndex(groupIndex, index) === selectedIndex" />
+					<slot
+						:item="item"
+						:active="
+							combineIndex(groupIndex, index) === selectedIndex
+						" />
 				</div>
 			</div>
 		</template>
@@ -41,8 +32,9 @@
 		</div>
 	</div>
 </template>
+
 <script>
-import { translate as t } from '@nextcloud/l10n'
+import { t } from '@nextcloud/l10n'
 
 export default {
 	name: 'SuggestionListWrapper',
@@ -52,32 +44,44 @@ export default {
 			type: Array,
 			required: true,
 		},
+
 		command: {
 			type: Function,
 			required: true,
 		},
 	},
+
+	emits: ['select'],
+
 	data() {
 		return {
 			selectedIndex: 0,
 		}
 	},
+
 	computed: {
 		hasGroups() {
 			return Object.keys(this.itemGroups).includes(undefined)
 		},
+
 		hasResults() {
 			return this.items.length > 0
 		},
+
 		itemHeight() {
 			return this.$el.scrollHeight / this.items.length
 		},
+
 		itemInsideScrollView() {
 			// If upper border of item is bigger or equal than scroll top
 			// and lower end of item is smaller or equal than scroll bottom
-			return this.selectedIndex * this.itemHeight >= this.$el.scrollTop
-				&& (this.selectedIndex + 1) * this.itemHeight <= this.$el.scrollTop + this.$el.clientHeight
+			return (
+				this.selectedIndex * this.itemHeight >= this.$el.scrollTop
+				&& (this.selectedIndex + 1) * this.itemHeight
+				<= this.$el.scrollTop + this.$el.clientHeight
+			)
 		},
+
 		itemGroups() {
 			const groups = {}
 			this.items.forEach((item) => {
@@ -88,6 +92,7 @@ export default {
 			})
 			return groups
 		},
+
 		combineIndex() {
 			return (groupIndex, index) => {
 				const previousItemCount = Object.values(this.itemGroups)
@@ -99,12 +104,14 @@ export default {
 			}
 		},
 	},
+
 	watch: {
 		items() {
 			this.selectedIndex = 0
 			this.$el.scrollTop = 0
 		},
 	},
+
 	methods: {
 		t,
 		onKeyDown({ event }) {
@@ -114,7 +121,8 @@ export default {
 			}
 
 			if (event.key === 'ArrowUp') {
-				this.selectedIndex = ((this.selectedIndex + this.items.length) - 1) % this.items.length
+				this.selectedIndex
+					= (this.selectedIndex + this.items.length - 1) % this.items.length
 				if (!this.itemInsideScrollView) {
 					this.$el.scrollTop = this.selectedIndex * this.itemHeight
 				}
@@ -124,7 +132,9 @@ export default {
 			if (event.key === 'ArrowDown') {
 				this.selectedIndex = (this.selectedIndex + 1) % this.items.length
 				if (!this.itemInsideScrollView) {
-					this.$el.scrollTop = (this.selectedIndex + 1) * this.itemHeight - this.$el.clientHeight
+					this.$el.scrollTop
+						= (this.selectedIndex + 1) * this.itemHeight
+							- this.$el.clientHeight
 				}
 				return true
 			}
@@ -168,11 +178,11 @@ export default {
 		font-weight: bold;
 		color: var(--color-primary-element);
 		font-size: var(--default-font-size);
-		line-height: 44px;
+		line-height: var(--default-clickable-area);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		opacity: .7;
+		opacity: 0.7;
 		box-shadow: none !important;
 		flex-shrink: 0;
 		padding-left: 8px;

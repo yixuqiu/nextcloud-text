@@ -1,85 +1,87 @@
-/*
- * @copyright Copyright (c) 2022 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import createSuggestions from '../suggestions.js'
+import { t } from '@nextcloud/l10n'
+import {
+	getLinkWithPicker,
+	searchProvider,
+} from '@nextcloud/vue/components/NcRichText'
 import LinkPickerList from './LinkPickerList.vue'
-import { searchProvider, getLinkWithPicker } from '@nextcloud/vue/dist/Components/NcRichText.js'
-import menuEntries from './../../Menu/entries.js'
+import { logger } from '../../../helpers/logger.ts'
+import markdownit from '../../../markdownit/index.ts'
+import shouldInterpretAsMarkdown from '../../../markdownit/shouldInterpretAsMarkdown.ts'
 import { getIsActive } from '../../Menu/utils.js'
-import markdownit from '../../../markdownit/index.js'
+import createSuggestions from '../suggestions.js'
+import { getMenuEntries } from './../../Menu/entries.ts'
 
+const suggestGroupImportant = t('text', 'Suggestions')
 const suggestGroupFormat = t('text', 'Formatting')
 const suggestGroupPicker = t('text', 'Smart picker')
 
-const filterOut = (e) => {
-	return ['undo', 'redo', 'outline', 'emoji-picker'].indexOf(e.key) > -1
-}
+const important = ['task-list', 'table', 'callout-info']
+const excludedFormatting = ['undo', 'redo', 'outline', 'emoji-picker']
 
-const important = ['task-list', 'table']
+const isImportant = (item) => important.includes(item.key) || important.includes(item.providerId)
 
-const hasMarkdownSyntax = (content) => {
-	// Regular expressions for common Markdown patterns
-	const markdownPatterns = [
-		/\*\*.*?\*\*/, // Bold: **text**
-		/\*.*?\*/, // Italics: *text*
-		/\[.*?\(.*?\)/, // Links: [text](url)
-		/^#{1,6}\s.*$/, // Headings: # text
-		/^\s*[-+*]\s.*/m, // Unordered list: - item
-		/^\s\d\..*/m, // Ordered list: 1. item
-		/^>+\s.*/, // Blockquote: > text
-		/`.*?`/, // Code: `code`
-	]
-
-	return markdownPatterns.some(pattern => pattern.test(content))
-}
-
-const isValidMarkdown = (content) => {
+/**
+ *
+ * @param {string} url to check
+ */
+function isValidUrl(url) {
 	try {
-		markdownit.parse(content)
-		return true
-	} catch (e) {
+		return Boolean(new URL(url))
+	} catch {
 		return false
 	}
 }
 
-const sortImportantFirst = (list) => {
+/**
+ *
+ * @param {string} query to filter by
+ * @param {object} editor the editor instance
+ */
+function formattingItems(query, editor) {
+	const menuEntries = getMenuEntries(false)
 	return [
-		...list.filter(e => important.indexOf(e.key) > -1),
-		...list.filter(e => important.indexOf(e.key) === -1),
+		...menuEntries.find((e) => e.key === 'headings').children,
+		...menuEntries.find((e) => e.key === 'lists').children,
+		...menuEntries.filter((e) => e.action && !excludedFormatting.includes(e.key)),
+		...menuEntries.find((e) => e.key === 'blocks').children,
+		{
+			...menuEntries.find((e) => e.key === 'emoji-picker'),
+			action: (command) => command.insertContent(':'),
+		},
 	]
+		.filter((e) => e?.label?.toLowerCase?.()?.includes(query.toLowerCase()))
+		.filter(({ action, isActive }) => {
+			const canRunState = action(editor?.can())
+			const isActiveState
+				= isActive && getIsActive({ isActive }, editor)
+			return canRunState && !isActiveState
+		})
 }
 
-const formattingSuggestions = (query) => {
-	return sortImportantFirst(
-		[
-			...menuEntries.find(e => e.key === 'headings').children,
-			...menuEntries.filter(e => e.action && !filterOut(e)),
-			...menuEntries.find(e => e.key === 'callouts').children,
-			{
-				...menuEntries.find(e => e.key === 'emoji-picker'),
-				action: (command) => command.insertContent(':'),
-			},
-		].filter(e => e?.label?.toLowerCase?.()?.includes(query.toLowerCase()))
-			.map(e => ({ ...e, suggestGroup: suggestGroupFormat })),
-	)
+/**
+ * @param {string} query to filter by
+ */
+function pickerItems(query) {
+	return searchProvider(query)
+		.map((p) => {
+			let label = p.title
+			if (p.id === 'files') {
+				// Rename "Files" to "Link a file", less ambiguous
+				label = t('text', 'Link a file')
+			}
+			return {
+				label,
+				icon: p.icon_url,
+				providerId: p.id,
+				order: p.order,
+			}
+		})
+		.filter((e) => e?.label?.toLowerCase?.()?.includes(query.toLowerCase()))
 }
 
 export default () => createSuggestions({
@@ -92,40 +94,51 @@ export default () => createSuggestions({
 			return
 		}
 		getLinkWithPicker(props.providerId, true)
-			.then(link => {
-				let content = link
-
-				if (hasMarkdownSyntax(content) && isValidMarkdown(content)) {
-					content = markdownit.render(content)
+			.then((link) => {
+				const isUrl = isValidUrl(link)
+				if (!isUrl) {
+					const isMarkdown = shouldInterpretAsMarkdown(link)
+					// Insert markdown content (e.g. from `text_templates` app)
+					const content = isMarkdown ? markdownit.render(link) : link
+					editor
+						.chain()
+						.focus()
+						.insertContentAt(range, content + ' ')
+						.run()
+					return
 				}
 
 				editor
 					.chain()
 					.focus()
-					.insertContentAt(range, content + ' ')
+					.deleteRange(range)
+					.insertPreview(link)
 					.run()
 			})
-			.catch(error => {
-				console.error('Smart picker promise rejected', error)
+			.catch((error) => {
+				logger.error('Smart picker promise rejected', error)
 			})
 	},
 	items: ({ editor, query }) => {
+		const pickers = pickerItems(query)
+		const formatting = formattingItems(query, editor)
 		return [
-			...searchProvider(query)
-				.map(p => {
-					return {
-						suggestGroup: suggestGroupPicker,
-						label: p.title,
-						icon: p.icon_url,
-						providerId: p.id,
-					}
-				}).filter(e => e?.label?.toLowerCase?.()?.includes(query.toLowerCase())),
-			...formattingSuggestions(query)
-				.filter(({ action, isActive }) => {
-					const canRunState = action(editor?.can())
-					const isActiveState = isActive && getIsActive({ isActive }, editor)
-					return canRunState && !isActiveState
-				}),
+			// pickers with order -1, then important pickers, then important formatting
+			...[
+				...pickers.filter((e) => e.order === -1),
+				...pickers.filter((e) => e.order !== -1 && isImportant(e)),
+				...formatting.filter(isImportant),
+			].map((e) => ({ ...e, suggestGroup: suggestGroupImportant })),
+
+			// Smart picker: remaining (non-important) pickers
+			...pickers
+				.filter((e) => e.order !== -1 && !isImportant(e))
+				.map((e) => ({ ...e, suggestGroup: suggestGroupPicker })),
+
+			// Formatting: remaining (non-important) formatting entries
+			...formatting
+				.filter((e) => !isImportant(e))
+				.map((e) => ({ ...e, suggestGroup: suggestGroupFormat })),
 		]
 	},
 })

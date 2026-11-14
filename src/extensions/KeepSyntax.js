@@ -1,3 +1,8 @@
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 import { Mark } from '@tiptap/core'
 
 /**
@@ -29,8 +34,10 @@ const KeepSyntax = Mark.create({
 	onUpdate() {
 		const tr = this.editor.state.tr
 
-		this.editor.state.doc.descendants((node, pos, parent, index) => {
-			if (node.marks.findIndex(mark => mark.type.name === this.name) !== -1) {
+		this.editor.state.doc.descendants((node, pos) => {
+			if (
+				node.marks.findIndex((mark) => mark.type.name === this.name) !== -1
+			) {
 				if (node.type.name !== 'text' || node.text.length !== 1) {
 					tr.removeMark(pos, pos + node.nodeSize, this.type)
 				}

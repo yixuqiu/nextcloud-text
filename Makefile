@@ -1,5 +1,6 @@
-# This file is licensed under the Affero General Public License version 3 or
-# later. See the COPYING file.
+# SPDX-FileCopyrightText: 2019-2024 Nextcloud GmbH and Nextcloud contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 app_name=$(notdir $(CURDIR))
 
 .NOTPARALLEL:
@@ -53,12 +54,12 @@ lint:
 lint-fix:
 	npm run lint:fix
 
-# Style linting
-stylelint:
-	npm run stylelint
+# Formatting
+format-check:
+	npm run prettier
 
-stylelint-fix:
-	npm run stylelint:fix
+format-fix:
+	npm run prettier:fix
 
 # Cleaning
 clean:
@@ -68,5 +69,6 @@ clean-dev:
 	rm -rf node_modules
 
 clean-git:
-	rm -r js/
-	git checkout -- js/
+	rm -rf js/
+	rm -rf css/
+	git checkout -- js/ css/

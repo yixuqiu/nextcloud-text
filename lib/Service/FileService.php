@@ -1,0 +1,230 @@
+<?php
+
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+namespace OCA\Text\Service;
+
+use OCA\Text\Exception\InvalidSessionException;
+use OCP\Constants;
+use OCP\Files\File;
+use OCP\Files\Folder;
+use OCP\Files\IRootFolder;
+use OCP\Files\Node;
+use OCP\Files\NotFoundException;
+use OCP\Files\NotPermittedException;
+use OCP\Files\Storage\ISharedStorage;
+use OCP\ISession;
+use OCP\IUser;
+use OCP\Share\Exceptions\ShareNotFound;
+use OCP\Share\IManager as ShareManager;
+use OCP\Share\IShare;
+use OCP\User\Exceptions\UserNotFoundException;
+use Psr\Log\LoggerInterface;
+
+class FileService {
+
+	public function __construct(
+		private readonly EncodingService $encodingService,
+		private readonly ISession $session,
+		private readonly IRootFolder $rootFolder,
+		private readonly LockService $lockService,
+		private readonly LoggerInterface $logger,
+		private readonly ShareManager $shareManager,
+	) {
+	}
+
+	/**
+	 * @throws NotFoundException
+	 */
+	public function getFileByIdFromShare(int $fileId, IShare $share): File {
+		$node = $share->getNode();
+		if ($node instanceof Folder) {
+			$node = $node->getFirstNodeById($fileId);
+		}
+		if ($node instanceof File && $node->getId() === $fileId) {
+			return $node;
+		}
+		throw new NotFoundException();
+	}
+
+	/**
+	 * @throws NotFoundException
+	 * @throws NotPermittedException
+	 */
+	public function getFileById(int $fileId, string $userId): File {
+
+		try {
+			$userFolder = $this->rootFolder->getUserFolder($userId);
+		} catch (UserNotFoundException) {
+			throw new NotFoundException();
+		}
+
+		// We currently don't know the path nor care about which file mount it is when getting by id
+		// therefore we can take a shortcut on the cached node if we have edit permissions on that
+		$file = $userFolder->getFirstNodeById($fileId);
+		if ($file instanceof File && $file->getPermissions() & Constants::PERMISSION_UPDATE) {
+			return $file;
+		}
+
+		// Ideally we'd optimize this part in the future by storing the path and getting the actual target directly
+		$files = array_filter($userFolder->getById($fileId), fn (Node $f) => $f instanceof File);
+		if (count($files) === 0) {
+			throw new NotFoundException();
+		}
+
+		// Workaround to always open files with edit permissions if multiple occurrences of
+		// the same file id are in the user home, ideally we should also track the path of the file when opening
+		$readableFile = null;
+		foreach ($files as $file) {
+			$permissions = $file->getPermissions();
+			if ($permissions & Constants::PERMISSION_READ && $permissions & Constants::PERMISSION_UPDATE) {
+				return $file;
+			}
+			if ($permissions & Constants::PERMISSION_READ) {
+				$readableFile = $file;
+			}
+		}
+		if ($readableFile !== null) {
+			return $readableFile;
+		}
+
+		throw new NotPermittedException();
+	}
+
+	/**
+	 * @throws \InvalidArgumentException if the share is not a File share and path is omitted.
+	 */
+	public function getFileFromShareByPath(Ishare $share, ?string $path = null): File {
+		// Check if we have proper read access (files drop)
+		// If not then well 404 it is.
+		$this->checkSharePermissions($share);
+
+		$node = $share->getNode();
+		if ($path !== null && $node instanceof Folder) {
+			$node = $node->get($path);
+		}
+		if ($node instanceof File) {
+			return $node;
+		}
+		throw new \InvalidArgumentException('Invalid share data.');
+	}
+
+	public function isReadOnly(File $file, IUser|IShare $auth): bool {
+		$readOnly = !$file->isUpdateable();
+		if ($auth instanceof IShare) {
+			try {
+				$this->checkSharePermissions($auth, Constants::PERMISSION_UPDATE);
+			} catch (NotFoundException) {
+				$readOnly = true;
+			}
+		}
+
+		$lockInfo = $this->lockService->getLockByOthers($file);
+
+		return $readOnly || $lockInfo !== null;
+	}
+
+	public function isDownloadDisabled(File $file): bool {
+		$storage = $file->getStorage();
+		if (!$storage->instanceOfStorage(ISharedStorage::class)) {
+			return false;
+		}
+		/** @var ISharedStorage $storage */
+		return $this->isShareDownloadDisabled($storage->getShare());
+	}
+
+	public function canSeeContent(File $file): bool {
+		$storage = $file->getStorage();
+		if (!$storage->instanceOfStorage(ISharedStorage::class)) {
+			return true;
+		}
+		/** @var ISharedStorage $storage */
+		return $storage->getShare()->canSeeContent();
+	}
+
+	public function isShareDownloadDisabled(IShare $share): bool {
+		$attributes = $share->getAttributes();
+		return $attributes !== null
+			&& $attributes->getAttribute('permissions', 'download') === false;
+	}
+
+	/**
+	 * @param $shareToken
+	 *
+	 * @return void
+	 *
+	 * @throws NotFoundException
+	 *
+	 * @psalm-param 1|2 $permission
+	 */
+	public function checkSharePermissions(IShare $share, int $permission = Constants::PERMISSION_READ): void {
+		if (($share->getPermissions() & $permission) === 0 || ($share->getNode()->getPermissions() & $permission) === 0) {
+			throw new NotFoundException();
+		}
+	}
+
+	public function checkFileAccessFromShare(int $fileId, string $shareToken): void {
+		try {
+			$share = $this->shareManager->getShareByToken($shareToken);
+		} catch (ShareNotFound) {
+			throw new InvalidSessionException();
+		}
+
+		$node = $this->rootFolder->getUserFolder($share->getShareOwner())->getFirstNodeById($fileId);
+		if ($node === null) {
+			throw new InvalidSessionException();
+		}
+
+		if ($share->getNodeType() === 'folder') {
+			$folder = $share->getNode();
+			if (!$folder instanceof Folder) {
+				throw new InvalidSessionException();
+			}
+			$file = $folder->getFirstNodeById($fileId);
+			if (!$file instanceof File) {
+				throw new InvalidSessionException();
+			}
+		}
+
+		if ($share->getPassword() !== null) {
+			$shareIds = $this->session->get('public_link_authenticated');
+			$shareIds = is_array($shareIds) ? $shareIds : [$shareIds];
+
+			if (!in_array($share->getId(), $shareIds, true)) {
+				throw new InvalidSessionException();
+			}
+		}
+
+		if (($share->getPermissions() & Constants::PERMISSION_READ) !== Constants::PERMISSION_READ) {
+			throw new InvalidSessionException();
+		}
+
+		if (!$share->canSeeContent()) {
+			throw new InvalidSessionException();
+		}
+	}
+
+	public function checkFileAccessForUser(int $fileId, string $userId): void {
+		if ($this->rootFolder->getUserFolder($userId)->getFirstNodeById($fileId) === null) {
+			throw new InvalidSessionException();
+		}
+	}
+
+	public function loadContent(File $file): ?string {
+		try {
+			$content = $file->getContent();
+			$content = $this->encodingService->encodeToUtf8($content);
+			if ($content === null) {
+				$this->logger->warning('Failed to encode file to UTF8. File ID: ' . $file->getId());
+			}
+		} catch (NotFoundException $e) {
+			$this->logger->warning($e->getMessage(), ['exception' => $e]);
+			$content = null;
+		}
+		return $content;
+	}
+
+}

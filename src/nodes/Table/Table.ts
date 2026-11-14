@@ -1,0 +1,405 @@
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+import type { Node as PMNode, ResolvedPos, Schema } from '@tiptap/pm/model'
+import type { Selection } from '@tiptap/pm/state'
+
+import { mergeAttributes } from '@tiptap/core'
+import { Table } from '@tiptap/extension-table'
+import { TextSelection } from '@tiptap/pm/state'
+import {
+	addRowAfter,
+	addRowBefore,
+	isInTable,
+	moveCellForward,
+	selectedRect,
+	selectionCell,
+} from '@tiptap/pm/tables'
+import { tableToMarkdown } from './markdown.ts'
+import TableCaption from './TableCaption.ts'
+import TableCell from './TableCell.ts'
+import TableHeader from './TableHeader.ts'
+import TableHeadRow from './TableHeadRow.ts'
+import TableRow from './TableRow.ts'
+
+declare module '@tiptap/core' {
+	interface Commands<ReturnType> {
+		text_table: {
+			/**
+			 * Move the selection to the node after the table
+			 */
+			leaveTable: () => ReturnType
+			/**
+			 * Move the selection to the same cell in the next row
+			 */
+			goToNextRow: () => ReturnType
+			/**
+			 * Sort the body rows by the column of the given cell
+			 *
+			 * @param direction Sort direction
+			 * @param cell Table cell or header node of the column to sort by
+			 */
+			sortColumn: (direction?: 'asc' | 'desc', cell?: PMNode | null) => ReturnType
+		}
+	}
+}
+
+/**
+ *
+ * @param schema - schema of the editor
+ * @param rowsCount - number of rows in the table
+ * @param colsCount - number of cols in the table
+ */
+function createTable(schema: Schema, rowsCount: number, colsCount: number) {
+	const headerCells: PMNode[] = []
+	const cells: PMNode[] = []
+	for (let index = 0; index < colsCount; index += 1) {
+		const cell = schema.nodes.tableCell.createAndFill()
+		if (cell) {
+			cells.push(cell)
+		}
+		const headerCell = schema.nodes.tableHeader.createAndFill()
+		if (headerCell) {
+			headerCells.push(headerCell)
+		}
+	}
+	const headRow = schema.nodes.tableHeadRow.createChecked(null, headerCells)
+	const rows = []
+	for (let index = 1; index < rowsCount; index += 1) {
+		rows.push(schema.nodes.tableRow.createChecked(null, cells))
+	}
+	return schema.nodes.table.createChecked(null, [headRow, ...rows])
+}
+
+/**
+ *
+ * @param $cell - resolved position of the current cell
+ */
+function findSameCellInNextRow($cell: ResolvedPos) {
+	if ($cell.index(-1) === $cell.node(-1).childCount - 1) {
+		return null
+	}
+	let cellStart = $cell.after()
+	const table = $cell.node(-1)
+	for (let row = $cell.indexAfter(-1); row < table.childCount; row++) {
+		const rowNode = table.child(row)
+		if (rowNode.childCount >= $cell.index()) {
+			for (let cell = 0; cell < $cell.index(); cell++) {
+				const cellNode = rowNode.child(cell)
+				cellStart += cellNode.nodeSize
+			}
+			return cellStart + 1
+		}
+		cellStart += rowNode.nodeSize
+	}
+	return null
+}
+
+/**
+ * Return the node type name if the selection sits inside a listItem/taskItem.
+ *
+ * @param selection - the editor selection
+ */
+function findListItemAtSelection(selection: Selection) {
+	const { $from } = selection
+	for (let depth = $from.depth; depth > 0; depth--) {
+		const name = $from.node(depth).type.name
+		if (name === 'listItem' || name === 'taskItem') {
+			return name
+		}
+	}
+}
+
+export default Table.extend({
+	content: 'tableCaption? tableHeadRow tableRow*',
+
+	addExtensions() {
+		return [TableCaption, TableCell, TableHeader, TableHeadRow, TableRow]
+	},
+
+	addCommands() {
+		return {
+			...this.parent?.(),
+			addRowAfter:
+				() => ({ chain, dispatch }) => {
+					return chain()
+						.command(({ state }) => addRowAfter(state, dispatch))
+						.command(({ state, tr }) => {
+							const { tableStart, table, bottom } = selectedRect(state)
+
+							if (dispatch) {
+								const lastRow = table.child(bottom - 1)
+								const newRow = table.child(bottom)
+								let pos = tableStart + 1
+								for (let i = 0; i < bottom; i++) {
+									pos += table.child(i).nodeSize
+								}
+
+								for (let i = 0; i < lastRow.childCount; i++) {
+									tr.setNodeAttribute(
+										pos,
+										'align',
+										lastRow.child(i).attrs.align,
+									)
+									pos += newRow.child(i).nodeSize
+								}
+							}
+							return true
+						})
+						.run()
+				},
+			addRowBefore:
+				() => ({ chain, dispatch }) => chain()
+					.command(({ state }) => addRowBefore(state, dispatch))
+					.command(({ state, tr }) => {
+						const { tableStart, table, top } = selectedRect(state)
+						if (dispatch) {
+							const lastRow = table.child(top)
+							const newRow = table.child(top - 1)
+							let pos = tableStart + 1
+							for (let i = 0; i < top - 1; i++) {
+								pos += table.child(i).nodeSize
+							}
+
+							for (let i = 0; i < lastRow.childCount; i++) {
+								tr.setNodeAttribute(
+									pos,
+									'align',
+									lastRow.child(i).attrs.align,
+								)
+								pos += newRow.child(i).nodeSize
+							}
+						}
+						return true
+					})
+					.run(),
+			insertTable:
+				() => ({ state, tr, dispatch, editor }) => {
+					if (isInTable(state)) {
+						return false
+					}
+					const node = createTable(editor.schema, 3, 3)
+					if (dispatch) {
+						const offset = tr.selection.anchor + 1
+						tr.replaceSelectionWith(node)
+							.scrollIntoView()
+							.setSelection(TextSelection.near(tr.doc.resolve(offset)))
+					}
+					return true
+				},
+			// move to the next node after the table from the last cell
+			leaveTable:
+				() => ({ state, tr, dispatch }) => {
+					if (!isInTable(state)) {
+						return false
+					}
+					const { $head, empty } = tr.selection
+					if (!empty) {
+						return false
+					}
+					// the selection can temporarily be inside the table but outside of cells.
+					const tableDepth = $head.depth < 3 ? 1 : $head.depth - 2
+					if (dispatch) {
+						const $next = tr.doc.resolve($head.after(tableDepth) + 1)
+						const selection = TextSelection.near($next)
+						dispatch(tr.setSelection(selection).scrollIntoView())
+					}
+					return true
+				},
+			goToNextRow:
+				() => ({ state, tr, dispatch }) => {
+					if (!isInTable(state)) {
+						return false
+					}
+					const cell = findSameCellInNextRow(selectionCell(state))
+					if (cell === null) {
+						return false
+					}
+					if (dispatch) {
+						const $cell = tr.doc.resolve(cell)
+						const selection = TextSelection.between(
+							$cell,
+							moveCellForward($cell),
+						)
+						dispatch(tr.setSelection(selection).scrollIntoView())
+					}
+					return true
+				},
+			sortColumn:
+				(direction = 'asc', cell = null) => ({ state, tr, dispatch }) => {
+					if (
+						cell?.type?.name !== 'tableCell'
+						&& cell?.type?.name !== 'tableHeader'
+					) {
+						return false
+					}
+
+					// Find the table, its position and the column index of the cell
+					// Assigned in the descendants() callback, which TypeScript cannot narrow through
+					let table = null as PMNode | null
+					let tablePos = null as number | null
+					let columnIndex = -1
+
+					state.doc.descendants((node, pos) => {
+						if (node.type.name !== 'table') {
+							return true
+						}
+
+						for (
+							let rowIndex = 0;
+							rowIndex < node.childCount;
+							rowIndex += 1
+						) {
+							const row = node.child(rowIndex)
+							for (
+								let currentColumnIndex = 0;
+								currentColumnIndex < row.childCount;
+								currentColumnIndex += 1
+							) {
+								if (row.child(currentColumnIndex) === cell) {
+									table = node
+									tablePos = pos
+									columnIndex = currentColumnIndex
+									return false
+								}
+							}
+						}
+
+						return true
+					})
+
+					if (!table || tablePos === null || columnIndex < 0) {
+						return false
+					}
+
+					const bodyRows: PMNode[] = []
+					const nonBodyChildren: PMNode[] = []
+					table.forEach((child) => {
+						if (child.type.name === 'tableRow') {
+							bodyRows.push(child)
+							return
+						}
+						nonBodyChildren.push(child)
+					})
+					if (bodyRows.length < 2) {
+						return true
+					}
+
+					// check if all rows have a cell at the column index and that the cell doesn't have colspan or rowspan
+					const canSortRows = bodyRows.every((row) => {
+						if (columnIndex >= row.childCount) {
+							return false
+						}
+						const targetCell = row.child(columnIndex)
+						return (
+							(targetCell.attrs.colspan ?? 1) === 1
+							&& (targetCell.attrs.rowspan ?? 1) === 1
+						)
+					})
+					if (!canSortRows) {
+						return false
+					}
+
+					// sort the rows based on the content of the cell at the column index
+					const collator = new Intl.Collator(undefined, {
+						numeric: true,
+						sensitivity: 'base',
+					})
+					const sortDirection = direction === 'desc' ? -1 : 1
+					const sortedRows = bodyRows
+						.map((row, index) => ({
+							index,
+							row,
+							key: row.child(columnIndex).textContent.trim(),
+						}))
+						.sort((a, b) => {
+							const keyCompare
+								= collator.compare(a.key, b.key) * sortDirection
+							if (keyCompare !== 0) {
+								return keyCompare
+							}
+							return a.index - b.index
+						})
+
+					const hasChangedOrder = sortedRows.some(({ index }, sortedIndex) => index !== sortedIndex)
+					if (!hasChangedOrder) {
+						return true
+					}
+
+					const sortedTable = table.type.createChecked(
+						table.attrs,
+						[...nonBodyChildren, ...sortedRows.map(({ row }) => row)],
+						table.marks,
+					)
+
+					if (dispatch) {
+						tr.replaceWith(
+							tablePos,
+							tablePos + table.nodeSize,
+							sortedTable,
+						)
+						dispatch(tr.scrollIntoView())
+					}
+
+					return true
+				},
+		}
+	},
+
+	renderHTML({ HTMLAttributes }) {
+		return [
+			'div',
+			{ class: 'table-wrapper', style: 'overflow-x: auto;' },
+			[
+				'table',
+				mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
+				0,
+			],
+		]
+	},
+
+	toMarkdown(state, node) {
+		tableToMarkdown(state, node)
+	},
+
+	addKeyboardShortcuts() {
+		return {
+			...this.parent?.(),
+			/**
+			 * <Tab> inside a table cell
+			 * When inside a list, indent the list item. Otherwise jump to
+			 * the next cell (or out of the table if in the last cell).
+			 */
+			Tab: () => {
+				const listItemName = findListItemAtSelection(this.editor.state.selection)
+				if (
+					listItemName
+					&& this.editor.commands.sinkListItem(listItemName)
+				) {
+					return true
+				}
+				return (
+					this.editor.commands.goToNextCell()
+					|| this.editor.commands.leaveTable()
+				)
+			},
+			/**
+			 * <Tab> inside a table cell
+			 * When inside a list, indent the list item. Otherwise jump to
+			 * the next cell (or out of the table if in the last cell).
+			 */
+			'Shift-Tab': () => {
+				const listItemName = findListItemAtSelection(this.editor.state.selection)
+				if (
+					listItemName
+					&& this.editor.commands.liftListItem(listItemName)
+				) {
+					return true
+				}
+				return this.editor.commands.goToPreviousCell()
+			},
+		}
+	},
+})

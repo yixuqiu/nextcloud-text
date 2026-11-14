@@ -1,34 +1,17 @@
 <!--
-  - @copyright Copyright (c) 2022 Vinicius Reis <vinicius@nextcloud.com>
-  -
-  - @author Vinicius Reis <vinicius@nextcloud.com>
-  - @author Grigorii K. Shartsev <me@shgk.me>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -
-  -->
+  - SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
-	<NcActions :title="tooltip"
+	<NcActions
+		:title="tooltip"
 		class="entry-list-action entry-action"
 		v-bind="state"
 		:container="menuIDSelector"
 		:aria-label="labelWithSelected"
-		:type="state.active ? 'primary': 'tertiary'"
-		:force-menu="true"
+		:variant="state.active ? 'primary' : 'tertiary'"
+		forceMenu
 		:data-text-action-entry="actionEntry.key"
 		:data-text-action-active="activeKey"
 		:disabled="!isEnabled"
@@ -37,28 +20,29 @@
 			<component :is="icon" :key="iconKey" />
 		</template>
 		<template v-for="child in children">
-			<NcActionSeparator v-if="child.isSeparator" :key="`child-${child.key}`" />
-			<ActionListItem v-else
+			<NcActionSeparator v-if="child.isSeparator" :key="`separator-${child.key}`" />
+			<ActionListItem
+				v-else
 				:key="`child-${child.key}`"
 				:active="currentChild?.key === child.key"
-				is-item
-				:action-entry="child"
-				v-on="$listeners"
-				@trigged="onTrigger" />
+				isItem
+				:actionEntry="child"
+				v-bind="$attrs"
+				@triggered="onTrigger" />
 		</template>
 		<slot v-bind="{ visible }" name="lastAction" />
 	</NcActions>
 </template>
 
 <script>
-import { NcActions, NcActionSeparator } from '@nextcloud/vue'
-import { BaseActionEntry } from './BaseActionEntry.js'
-import ActionListItem from './ActionListItem.vue'
-import { getActionState, getIsActive } from './utils.js'
-import { useOutlineStateMixin } from '../Editor/Wrapper.provider.js'
-import useStore from '../../mixins/store.js'
-import { useMenuIDMixin } from './MenuBar.provider.js'
+import { t } from '@nextcloud/l10n'
 import debounce from 'debounce'
+import NcActions from '@nextcloud/vue/components/NcActions'
+import NcActionSeparator from '@nextcloud/vue/components/NcActionSeparator'
+import ActionListItem from './ActionListItem.vue'
+import { BaseActionEntry } from './BaseActionEntry.js'
+import { useMenuIDMixin } from './MenuBar.provider.js'
+import { getActionState, getIsActive } from './utils.js'
 
 export default {
 	name: 'ActionList',
@@ -67,23 +51,30 @@ export default {
 		NcActionSeparator,
 		ActionListItem,
 	},
+
 	extends: BaseActionEntry,
-	mixins: [useStore, useOutlineStateMixin, useMenuIDMixin],
+	mixins: [useMenuIDMixin],
 	props: {
 		forceEnabled: {
 			type: Boolean,
 			default: false,
 		},
 	},
+
+	emits: ['triggered'],
+
+	setup: BaseActionEntry.setup,
+
 	data: () => ({
 		visible: false,
 		hasEnabledChild: true,
 	}),
+
 	computed: {
 		currentChild() {
 			const {
 				state,
-				$editor,
+				editor,
 				actionEntry: { children },
 			} = this
 
@@ -91,10 +82,11 @@ export default {
 				return null
 			}
 
-			return children.find(child => {
-				return getIsActive(child, $editor)
+			return children.find((child) => {
+				return getIsActive(child, editor)
 			})
 		},
+
 		icon() {
 			if (this.currentChild) {
 				return this.currentChild.icon
@@ -102,67 +94,80 @@ export default {
 
 			return this.actionEntry.icon
 		},
+
 		iconKey() {
 			return `${this.actionEntry.key}/${this.activeKey}`
 		},
+
 		activeKey() {
 			return this.currentChild?.key
 		},
+
 		children() {
 			return this.actionEntry.children.filter(({ visible }) => {
 				if (visible === undefined) {
 					return true
 				}
 
-				return typeof visible === 'function'
-					? visible(this)
-					: visible
+				return typeof visible === 'function' ? visible(this) : visible
 			})
 		},
+
 		labelWithSelected() {
 			if (this.currentChild) {
-				// TRANSLATORS: examples - Headings, "Heading 1" is selected - Callouts, "Info" is selected
-				return t('text', '{menuItemName}, "{selectedSubMenuItemName}" is selected', {
-					menuItemName: this.actionEntry.label,
-					selectedSubMenuItemName: this.currentChild.label,
-				})
+				// TRANSLATORS: examples - Headings, "Heading 1" is selected - Blocks, "Info callout" is selected
+				return t(
+					'text',
+					'{menuItemName}, "{selectedSubMenuItemName}" is selected',
+					{
+						menuItemName: this.actionEntry.label,
+						selectedSubMenuItemName: this.currentChild.label,
+					},
+				)
 			}
 
 			return this.actionEntry.label
 		},
+
 		isEnabled() {
 			return this.forceEnabled || this.hasEnabledChild
 		},
 	},
+
 	mounted() {
 		this.$_updateState = debounce(this.checkStateOfChildren.bind(this), 50)
-		this.$editor.on('update', this.$_updateState)
-		this.$editor.on('selectionUpdate', this.$_updateState)
+		this.editor?.on('update', this.$_updateState)
+		this.editor?.on('selectionUpdate', this.$_updateState)
 	},
-	beforeDestroy() {
-		this.$editor.off('update', this.$_updateState)
-		this.$editor.off('selectionUpdate', this.$_updateState)
+
+	beforeUnmount() {
+		this.editor?.off('update', this.$_updateState)
+		this.editor?.off('selectionUpdate', this.$_updateState)
 	},
+
 	methods: {
 		onOpenChange(val) {
 			this.visible = val
 		},
+
 		runAction() {
 			// nothing todo
 		},
+
 		onTrigger(entry) {
 			if (entry?.click) {
 				return
 			}
-			this.$editor.chain().focus().run()
-			this.$emit('trigged', entry)
+			this.editor?.chain().focus().run()
+			this.$emit('triggered', entry)
 		},
+
 		checkStateOfChildren() {
-			this.hasEnabledChild = this.children.some(child => this.isChildEnabled(child))
+			this.hasEnabledChild = this.children.some((child) => this.isChildEnabled(child))
 		},
+
 		isChildEnabled(child) {
-			return !child.isSeparator
-				&& !getActionState(child, this.$editor).disabled
+			return !child.isSeparator && !getActionState(child, this.editor).disabled
 		},
 	},
 }

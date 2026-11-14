@@ -1,0 +1,149 @@
+/**
+ * SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+import type { MarkdownIt, StateBlock, Token } from 'markdown-it'
+
+const DETAILS_START_REGEX = /^<details(?<open>\s+open(?:=(?:""|''|open))?)?>\s*$/
+const DETAILS_AND_SUMMARY_START_REGEX = /^<details(?<open>\s+open(?:=(?:""|''|open))?)?>\s*<summary>(?<summary>.*)<\/summary>\s*$/
+const DETAILS_END_REGEX = /^<\/details>\s*$/
+const SUMMARY_REGEX = /(?<=^<summary>).*(?=<\/summary>\s*$)/
+
+/**
+ *
+ * @param state - MarkdownIt state
+ * @param startLine - start line number
+ * @param endLine - end line number
+ * @param silent - validation mode
+ */
+function parseDetails(
+	state: StateBlock,
+	startLine: number,
+	endLine: number,
+	silent: boolean,
+) {
+	// let autoClosedBlock = false
+	let start = state.bMarks[startLine] + state.tShift[startLine]
+	let max = state.eMarks[startLine]
+
+	let detailsFound = false
+	let detailsSummary = null
+	let openDetails: boolean
+	let startLineCount = 2
+
+	const openingLine = state.src.slice(start, max)
+	const combined = openingLine.match(DETAILS_AND_SUMMARY_START_REGEX)
+	if (combined) {
+		// Details block start and summary in same line
+		detailsSummary = combined.groups!.summary!.trim()
+		openDetails = Boolean(combined.groups!.open)
+		startLineCount = 1
+	} else {
+		const opening = openingLine.match(DETAILS_START_REGEX)
+		if (!opening) {
+			return false
+		}
+		openDetails = Boolean(opening.groups!.open)
+	}
+
+	// Since start is found, we can report success here in validation mode
+	if (silent) {
+		return true
+	}
+
+	let nestedCount = 0
+	let nextLine = startLine
+	for (;;) {
+		nextLine++
+		if (nextLine >= endLine) {
+			break
+		}
+
+		start = state.bMarks[nextLine] + state.tShift[nextLine]
+		max = state.eMarks[nextLine]
+
+		// Details summary
+		const m = state.src.slice(start, max).match(SUMMARY_REGEX)
+		if (m && detailsSummary === null) {
+			// Only set `detailsSummary` the first time
+			// Ignore future summary tags (in nested/broken details)
+			detailsSummary = m[0].trim()
+			continue
+		}
+
+		// Nested details
+		if (state.src.slice(start, max).match(DETAILS_START_REGEX)) {
+			nestedCount++
+		}
+
+		// Details block end
+		if (!state.src.slice(start, max).match(DETAILS_END_REGEX)) {
+			continue
+		}
+
+		// Regard nested details blocks
+		if (nestedCount > 0) {
+			nestedCount--
+		} else {
+			detailsFound = true
+			break
+		}
+	}
+
+	if (!detailsFound || detailsSummary === null) {
+		return false
+	}
+
+	const oldParent = state.parentType
+	const oldLineMax = state.lineMax
+	state.parentType = 'reference'
+
+	// This will prevent lazy continuations from ever going past our end marker
+	state.lineMax = nextLine
+
+	// Push tokens to the state
+
+	let token = state.push('details_open', 'details', 1)
+	token.block = true
+	token.info = detailsSummary
+	token.map = [startLine, nextLine]
+	if (openDetails) {
+		token.attrSet('open', '')
+	}
+
+	token = state.push('details_summary', 'summary', 1)
+	token.block = false
+
+	// Parse and push summary to preserve markup
+	const tokens: Token[] = []
+	state.md.inline.parse(detailsSummary, state.md, state.env, tokens)
+	for (const t of tokens) {
+		token = state.push(t.type, t.tag, t.nesting)
+		token.block = t.block
+		token.markup = t.markup
+		token.content = t.content
+	}
+
+	state.push('details_summary', 'summary', -1)
+
+	state.md.block.tokenize(state, startLine + startLineCount, nextLine)
+
+	token = state.push('details_close', 'details', -1)
+	token.block = true
+
+	state.parentType = oldParent
+	state.lineMax = oldLineMax
+	state.line = nextLine + 1
+
+	return true
+}
+
+/**
+ * @param md - Markdown object
+ */
+export default function details(md: MarkdownIt) {
+	md.block.ruler.before('fence', 'details', parseDetails, {
+		alt: ['paragraph', 'reference', 'blockquote', 'list'],
+	})
+}

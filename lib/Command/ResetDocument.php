@@ -1,41 +1,32 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2018 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text\Command;
 
 use OCA\Text\Exception\DocumentHasUnsavedChangesException;
 use OCA\Text\Service\DocumentService;
+use OCA\Text\Service\FileService;
+use OCA\Text\Service\LockService;
+use OCP\Files\Config\IUserMountCache;
+use OCP\Files\NotFoundException;
+use OCP\Files\NotPermittedException;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 class ResetDocument extends Command {
-	protected DocumentService $documentService;
-
-	public function __construct(DocumentService $documentService) {
+	public function __construct(
+		protected DocumentService $documentService,
+		protected IUserMountCache $userMountCache,
+		protected FileService $fileService,
+		protected LockService $lockService,
+	) {
 		parent::__construct();
-		$this->documentService = $documentService;
 	}
 
 	protected function configure(): void {
@@ -44,8 +35,14 @@ class ResetDocument extends Command {
 			->setDescription('Reset a text document session to the current file content')
 			->addArgument(
 				'file-id',
-				InputArgument::REQUIRED,
+				InputArgument::OPTIONAL,
 				'File id of the document to reset'
+			)
+			->addOption(
+				'all',
+				'a',
+				null,
+				'Reset all document sessions'
 			)
 			->addOption(
 				'force',
@@ -56,30 +53,72 @@ class ResetDocument extends Command {
 		;
 	}
 
-	/**
-	 * @param InputInterface $input
-	 * @param OutputInterface $output
-	 * @return int
-	 */
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$fileId = $input->getArgument('file-id');
+		$all = $input->getOption('all');
 		$fullReset = $input->getOption('force');
 
-		if ($fullReset) {
-			$output->writeln('Force-reset the document session for file ' . $fileId);
-			$this->documentService->resetDocument($fileId, true);
-
-			return 0;
+		if (!$fileId && !$all) {
+			$output->writeln('<error>Either --all option or file-id argument is required.</error>');
+			return 1;
 		}
-
-		$output->writeln('Reset the document session for file ' . $fileId);
-		try {
-			$this->documentService->resetDocument($fileId);
-		} catch (DocumentHasUnsavedChangesException) {
-			$output->writeln('Not resetting due to unsaved changes');
+		if ($fileId && $all) {
+			$output->writeln('<error>The --all option and file id argument are exclusionary.</error>');
 			return 1;
 		}
 
-		return 0;
+		if ($all && $fullReset) {
+			// Truncate tables and clear document directory
+			$this->documentService->clearAll();
+			return 0;
+		}
+
+		if ($all) {
+			$fileIds = [];
+			foreach ($this->documentService->getAll() as $document) {
+				if ($document->getContextType() === 'file') {
+					$fileIds[] = $document->getContextId();
+				}
+			}
+		} else {
+			$fileIds = [$fileId];
+		}
+
+		$rc = 0;
+		foreach ($fileIds as $id) {
+
+			if ($fullReset) {
+				$output->writeln('Force-reset the document session for file ' . $id);
+			} else {
+				$output->writeln('Reset the document session for file ' . $id);
+			}
+
+			try {
+				$this->documentService->resetDocument('file', $id, $fullReset);
+				$this->tryToUnlock($id, $output);
+			} catch (DocumentHasUnsavedChangesException) {
+				$output->writeln('Not resetting due to unsaved changes');
+				$rc = 1;
+			}
+		}
+
+		return $rc;
+	}
+
+	protected function tryToUnlock(int $fileId, OutputInterface $output): void {
+		$mounts = $this->userMountCache->getMountsForFileId($fileId);
+		$anyMount = array_shift($mounts);
+		if ($anyMount === null) {
+			$output->writeln('Could not fallback to file from mounts for ' . $fileId);
+			return;
+		}
+		$userId = $anyMount->getUser()->getUID();
+
+		try {
+			$file = $this->fileService->getFileById($fileId, $userId);
+			$this->lockService->unlock($file);
+		} catch (NotFoundException|NotPermittedException) {
+			// Continue with the cleanup even if the file does not exist.
+		}
 	}
 }

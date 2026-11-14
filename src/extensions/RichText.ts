@@ -1,0 +1,199 @@
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+import type { AnyExtension, Extensions } from '@tiptap/core'
+import type { Connection } from '../types/Connection.ts'
+
+import { t } from '@nextcloud/l10n'
+import { Extension } from '@tiptap/core'
+import Blockquote from '@tiptap/extension-blockquote'
+import Document from '@tiptap/extension-document'
+import { ListItem } from '@tiptap/extension-list'
+import Placeholder from '@tiptap/extension-placeholder'
+import Text from '@tiptap/extension-text'
+import { CharacterCount, Dropcursor, Gapcursor } from '@tiptap/extensions'
+import { common, createLowlight } from 'lowlight'
+import EmojiSuggestion from '../components/Suggestion/Emoji/suggestions.js'
+import MentionSuggestion from '../components/Suggestion/Mention/suggestions.js'
+import {
+	Code,
+	Highlight,
+	Italic,
+	Link,
+	Strike,
+	Strong,
+	Underline,
+} from '../marks/index.js'
+import BulletList from '../nodes/BulletList.ts'
+import Callouts from '../nodes/Callout.js'
+import CodeBlock from '../nodes/CodeBlock.js'
+import Comments from '../nodes/Comments.ts'
+import Details from '../nodes/Details.js'
+import EditableTable from '../nodes/EditableTable.ts'
+import Footnotes from '../nodes/Footnotes.ts'
+import FrontMatter from '../nodes/FrontMatter.js'
+import HardBreak from '../nodes/HardBreak.js'
+import Heading from '../nodes/Heading.js'
+import HorizontalRule from '../nodes/HorizontalRule.ts'
+import Image from '../nodes/Image.js'
+import ImageInline from '../nodes/ImageInline.js'
+import { MathBlock, MathInline } from '../nodes/Mathematics.js'
+import OrderedList from '../nodes/OrderedList.ts'
+import Paragraph from '../nodes/Paragraph.js'
+import Preview from '../nodes/Preview.js'
+import Table from '../nodes/Table.ts'
+import TaskItem from '../nodes/TaskItem.ts'
+import TaskList from '../nodes/TaskList.ts'
+import TrailingNode from '../nodes/TrailingNode.js'
+import AnnotationsVisibility from './AnnotationsVisibility.ts'
+import CommentBubble from './CommentBubble.ts'
+import Emoji from './Emoji.js'
+import KeepSyntax from './KeepSyntax.js'
+import Keymap from './Keymap.js'
+import LinkBubble from './LinkBubble.js'
+import LinkPicker from './LinkPicker.js'
+import Markdown from './Markdown.js'
+import Mention from './Mention.js'
+import Search from './Search.ts'
+import TextDirection from './TextDirection.ts'
+import TranslateAttribute from './TranslateAttribute.ts'
+import Typography from './Typography.ts'
+
+const lowlight = createLowlight(common)
+lowlight.registerAlias('plaintext', 'mermaid')
+
+interface RichTextOptions {
+	connection?: Connection
+	editing: boolean
+	extensions: Extensions
+	relativePath?: string
+	isEmbedded: boolean
+	mentionSearch?: (query: string) => Promise<Record<string, string>>
+	openLink?: (href: string) => void
+	noLazyImages: boolean
+}
+
+export default Extension.create<RichTextOptions>({
+	name: 'RichText',
+
+	addOptions() {
+		return {
+			editing: true,
+			extensions: [],
+			isEmbedded: false,
+			noLazyImages: false,
+		}
+	},
+
+	addExtensions() {
+		const defaultExtensions = [
+			Markdown,
+			Document.extend({
+				content: 'block+ comments? footnotes?',
+				// The trailing `comments`/`footnotes` make `footnotes` the default
+				// type after the first block, so without this override the gap
+				// cursor's textblock check rejects every position but the start.
+				allowGapCursor: true,
+			}),
+			Text,
+			Paragraph,
+			HardBreak,
+			Heading,
+			Strong,
+			Highlight,
+			Italic,
+			Strike,
+			Blockquote,
+			CharacterCount,
+			Code,
+			CodeBlock.configure({
+				lowlight,
+				defaultLanguage: 'plaintext',
+			}),
+			Details,
+			AnnotationsVisibility,
+			Comments,
+			Footnotes,
+			BulletList,
+			HorizontalRule,
+			OrderedList,
+			ListItem,
+			this.options.editing ? EditableTable : Table,
+			TaskList,
+			TaskItem,
+			Callouts,
+			Preview.configure({
+				isEmbedded: this.options.isEmbedded,
+			}),
+			Underline,
+			Image.configure({
+				emitAttachmentEvents: this.options.editing,
+				noLazyImages: this.options.noLazyImages,
+			}),
+			ImageInline.configure({ noLazyImages: this.options.noLazyImages }),
+			Dropcursor.configure({
+				color: 'var(--color-primary-element)',
+				width: 2,
+			}),
+			Gapcursor,
+			KeepSyntax,
+			Keymap,
+			FrontMatter,
+			Mention.configure({
+				suggestion: MentionSuggestion({
+					connection: this.options.connection,
+					options: {
+						mentionSearch: this.options.mentionSearch,
+					},
+				}),
+			}),
+			Search,
+			Emoji.configure({
+				suggestion: EmojiSuggestion(),
+			}),
+			LinkPicker,
+			Link.configure({
+				openOnClick: true,
+				shouldAutoLink: (href) => /^https?:\/\//.test(href),
+				relativePath: this.options.relativePath,
+				openLink: this.options.openLink,
+			}),
+			LinkBubble,
+			CommentBubble,
+			...(this.options.editing
+				? [ Placeholder.configure({
+						placeholder: t('text', "Start writing or type '/' to add…"),
+					})]
+				: []),
+			TrailingNode.configure({
+				notAfter: ['paragraph', 'comments', 'footnotes'],
+			}),
+			TextDirection.configure({
+				types: [
+					'blockquote',
+					'callout',
+					'comment',
+					'commentItem',
+					'detailsSummary',
+					'footnote',
+					'heading',
+					'listItem',
+					'paragraph',
+					'tableCell',
+					'tableHeader',
+					'taskItem',
+				],
+			}),
+			TranslateAttribute,
+			Typography,
+			MathInline,
+			MathBlock,
+		] as const
+		const additionalExtensionNames = this.options.extensions.map((e: AnyExtension) => e.name)
+		return [
+			...defaultExtensions.filter((e) => e && !additionalExtensionNames.includes(e.name)),
+			...this.options.extensions,
+		]
+	},
+})

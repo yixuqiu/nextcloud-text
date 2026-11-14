@@ -1,0 +1,47 @@
+/**
+ * SPDX-FileCopyrightText: 2023-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+import { describe, expect, it, vi } from 'vitest'
+import { shallowRef } from 'vue'
+import { SyncService } from '../../services/SyncService.ts'
+import initWebSocketPolyfill from '../../services/WebSocketPolyfill.js'
+
+vi.mock(import('../../services/SyncService.ts'), () => {
+	const SyncService = vi.fn()
+	SyncService.prototype.bus = { on: vi.fn() }
+	SyncService.prototype.open = vi.fn().mockImplementation(async () => ({}))
+	SyncService.prototype.hasActiveConnection = vi.fn()
+	return { SyncService }
+})
+
+describe('Init function', () => {
+	const mockSyncService = () => new SyncService({
+		connection: shallowRef(undefined),
+		openConnection: vi.fn(),
+	})
+
+	it('returns a websocket polyfill class', () => {
+		const syncService = mockSyncService()
+		const Polyfill = initWebSocketPolyfill(syncService)
+		const websocket = new Polyfill('url')
+		expect(websocket).toBeInstanceOf(Polyfill)
+	})
+
+	it('registers handlers', () => {
+		const syncService = mockSyncService()
+		const Polyfill = initWebSocketPolyfill(syncService)
+		const websocket = new Polyfill('url')
+		expect(websocket).toBeInstanceOf(Polyfill)
+		expect(syncService.bus.on).toHaveBeenCalled()
+	})
+
+	it('opens sync service', () => {
+		const syncService = mockSyncService()
+		const Polyfill = initWebSocketPolyfill(syncService)
+		const websocket = new Polyfill('url')
+		expect(websocket).toBeInstanceOf(Polyfill)
+		expect(syncService.open).toHaveBeenCalled()
+	})
+})

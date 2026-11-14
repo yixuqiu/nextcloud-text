@@ -1,25 +1,53 @@
+<!--
+  - SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 <template>
 	<div class="placeholder-main placeholder-main-text">
 		<!-- Placeholder animation -->
-		<template v-for="(suffix, gradientIndex) in ['-regular', '-reverse']">
-			<svg :key="'gradient' + suffix" :class="'placeholder-gradient placeholder-gradient' + suffix">
+		<template
+			v-for="(suffix, gradientIndex) in ['-regular', '-reverse']"
+			:key="'gradient-' + suffix">
+			<svg :class="'placeholder-gradient placeholder-gradient' + suffix">
 				<defs>
 					<linearGradient :id="'placeholder-gradient' + suffix">
-						<stop offset="0%" :stop-color="(gradientIndex === 0) ? colorPlaceholderLight : colorPlaceholderDark" />
-						<stop offset="100%" :stop-color="(gradientIndex === 0) ? colorPlaceholderDark : colorPlaceholderLight" />
+						<stop
+							offset="0%"
+							:stop-color="
+								gradientIndex === 0
+									? colorPlaceholderLight
+									: colorPlaceholderDark
+							" />
+						<stop
+							offset="100%"
+							:stop-color="
+								gradientIndex === 0
+									? colorPlaceholderDark
+									: colorPlaceholderLight
+							" />
 					</linearGradient>
 				</defs>
 			</svg>
 
-			<ul :key="'list' + suffix" :class="'placeholder-list placeholder-list' + suffix">
+			<ul :class="'placeholder-list placeholder-list' + suffix">
 				<li v-for="index in count" :key="'placeholder' + suffix + index">
-					<svg class="text-placeholder"
+					<svg
+						class="text-placeholder"
 						xmlns="http://www.w3.org/2000/svg"
 						:fill="'url(#placeholder-gradient' + suffix + ')'">
-						<rect class="text-placeholder-line-one" :style="textPlaceholderData[0]" />
-						<rect class="text-placeholder-line-two" :style="textPlaceholderData[1]" />
-						<rect class="text-placeholder-line-three" :style="textPlaceholderData[2]" />
-						<rect class="text-placeholder-line-four" :style="textPlaceholderData[3]" />
+						<rect
+							class="text-placeholder-line-one"
+							:style="textPlaceholderData[0]" />
+						<rect
+							class="text-placeholder-line-two"
+							:style="textPlaceholderData[1]" />
+						<rect
+							class="text-placeholder-line-three"
+							:style="textPlaceholderData[2]" />
+						<rect
+							class="text-placeholder-line-four"
+							:style="textPlaceholderData[3]" />
 					</svg>
 				</li>
 			</ul>
@@ -162,5 +190,4 @@ $messages-list-max-width: 670px;
 		opacity: 0;
 	}
 }
-
 </style>

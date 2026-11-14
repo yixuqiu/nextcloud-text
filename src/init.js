@@ -1,17 +1,21 @@
-import { registerFileListHeaders, registerDavProperty } from '@nextcloud/files'
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+import { registerFileListHeader } from '@nextcloud/files'
+import { registerDavProperty } from '@nextcloud/files/dav'
 import { loadState } from '@nextcloud/initial-state'
 import { addMenuRichWorkspace, FilesWorkspaceHeader } from './helpers/files.js'
-import { linkTo } from '@nextcloud/router'
 
-__webpack_nonce__ = window.btoa(OC.requestToken) // eslint-disable-line
-__webpack_public_path__ = linkTo('text', 'js/') // eslint-disable-line
+import 'vite/modulepreload-polyfill'
 
 const workspaceAvailable = loadState('text', 'workspace_available')
 
-registerDavProperty('nc:rich-workspace', { nc: 'http://nextcloud.org/ns' })
-registerDavProperty('nc:rich-workspace-file', { nc: 'http://nextcloud.org/ns' })
+registerDavProperty('nc:rich-workspace-flat', { nc: 'http://nextcloud.org/ns' })
+registerDavProperty('nc:rich-workspace-file-flat', { nc: 'http://nextcloud.org/ns' })
 
 if (workspaceAvailable) {
 	addMenuRichWorkspace()
-	registerFileListHeaders(FilesWorkspaceHeader)
+	registerFileListHeader(FilesWorkspaceHeader)
 }

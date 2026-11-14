@@ -1,145 +1,48 @@
 /**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { emit } from '@nextcloud/event-bus'
-import { Header, addNewFileMenuEntry, Permission, File } from '@nextcloud/files'
-import { imagePath } from '@nextcloud/router'
-import { loadState } from '@nextcloud/initial-state'
-
-import { getSharingToken } from './token.js'
-import { openMimetypes } from './mime.js'
-import store from '../store/index.js'
+import TextSvg from '@mdi/svg/svg/text.svg?raw'
 import { getCurrentUser } from '@nextcloud/auth'
-import { showSuccess, showError } from '@nextcloud/dialogs'
 import axios from '@nextcloud/axios'
-import { dirname } from 'path'
-
-import TextSvg from '@mdi/svg/svg/text.svg'
+import { showError, showSuccess } from '@nextcloud/dialogs'
+import { emit } from '@nextcloud/event-bus'
+import {
+	addNewFileMenuEntry,
+	File,
+	NewMenuEntryCategory,
+	Permission,
+} from '@nextcloud/files'
+import { loadState } from '@nextcloud/initial-state'
+import { t } from '@nextcloud/l10n'
+import { createApp, h, reactive } from 'vue'
+import { logger } from './logger.ts'
 
 const FILE_ACTION_IDENTIFIER = 'Edit with text app'
 
-const registerFileCreate = () => {
-	const newFileMenuPlugin = {
-		attach(menu) {
-			const fileList = menu.fileList
-
-			// only attach to main file list, public view is not supported yet
-			if (fileList.id !== 'files' && fileList.id !== 'files.public') {
-				return
-			}
-
-			// register the new menu entry
-			menu.addMenuEntry({
-				id: 'file',
-				displayName: t('text', 'New text file'),
-				templateName: t('text', 'New text file') + '.' + loadState('text', 'default_file_extension'),
-				iconClass: 'icon-filetype-text',
-				fileType: 'file',
-				actionLabel: t('text', 'Create new text file'),
-				actionHandler(name) {
-					fileList.createFile(name).then(function(status, data) {
-						const fileInfoModel = new OCA.Files.FileInfoModel(data)
-						if (typeof OCA.Viewer !== 'undefined') {
-							OCA.Files.fileActions.triggerAction('view', fileInfoModel, fileList)
-						} else if (typeof OCA.Viewer === 'undefined') {
-							OCA.Files.fileActions.triggerAction(FILE_ACTION_IDENTIFIER, fileInfoModel, fileList)
-						}
-					})
-				},
-			})
-		},
-	}
-	OC.Plugins.register('OCA.Files.NewFileMenu', newFileMenuPlugin)
-}
-
-const registerFileActionFallback = () => {
-	const sharingToken = getSharingToken()
-	const filesTable = document.querySelector('#preview table.files-filestable')
-	if (!sharingToken || !filesTable) {
-		const ViewerRoot = document.createElement('div')
-		ViewerRoot.id = 'text-viewer-fallback'
-		document.body.appendChild(ViewerRoot)
-		const registerAction = (mime) => OCA.Files.fileActions.register(
-			mime,
-			FILE_ACTION_IDENTIFIER,
-			OC.PERMISSION_UPDATE | OC.PERMISSION_READ,
-			imagePath('core', 'actions/rename'),
-			(filename) => {
-				const file = window.FileList.findFile(filename)
-				Promise.all([
-					import('vue'),
-					import(/* webpackChunkName: "files-modal" */'./../components/PublicFilesEditor.vue'),
-				]).then((imports) => {
-					const path = window.FileList.getCurrentDirectory() + '/' + filename
-					const Vue = imports[0].default
-					Vue.prototype.t = window.t
-					Vue.prototype.n = window.n
-					Vue.prototype.OCA = window.OCA
-					const Editor = imports[1].default
-					const vm = new Vue({
-						render: function(h) { // eslint-disable-line
-							const self = this
-							return h(Editor, {
-								props: {
-									fileId: file ? file.id : null,
-									active: true,
-									shareToken: sharingToken,
-									relativePath: path,
-									mimeType: file.mimetype,
-								},
-								on: {
-									close: function() { // eslint-disable-line
-										self.$destroy()
-									},
-								},
-							})
-						},
-					})
-					vm.$mount(ViewerRoot)
-				})
-			},
-			t('text', 'Edit'),
-		)
-
-		for (let i = 0; i < openMimetypes.length; i++) {
-			registerAction(openMimetypes[i])
-			OCA.Files.fileActions.setDefault(openMimetypes[i], FILE_ACTION_IDENTIFIER)
-		}
-	}
-
-}
-
-let newWorkspaceCreated = false
-
-export const addMenuRichWorkspace = () => {
-	const descriptionFile = t('text', 'Readme') + '.' + loadState('text', 'default_file_extension')
+/**
+ *
+ */
+export function addMenuRichWorkspace() {
+	const descriptionFile
+		= 'Readme.' + loadState('text', 'default_file_extension')
 	addNewFileMenuEntry({
 		id: 'rich-workspace-init',
 		displayName: t('text', 'Add folder description'),
+		category: NewMenuEntryCategory.Other,
 		enabled(context) {
-			if (Number(context.attributes['rich-workspace-file'])) {
+			if (!window?.OCA?.Text?.RichWorkspaceEnabled) {
 				return false
 			}
-			return (context.permissions & Permission.CREATE) !== 0
+			if (Number(context.attributes['rich-workspace-file-flat'])) {
+				return false
+			}
+			// Check read permission to not show option in file drop shares
+			return (
+				(context.permissions & Permission.READ) !== 0
+				&& (context.permissions & Permission.CREATE) !== 0
+			)
 		},
 		iconSvgInline: TextSvg,
 		async handler(context, content) {
@@ -150,7 +53,8 @@ export const addMenuRichWorkspace = () => {
 				return
 			}
 
-			const source = context.encodedSource + '/' + encodeURIComponent(descriptionFile)
+			const source
+				= context.encodedSource + '/' + encodeURIComponent(descriptionFile)
 			const response = await axios({
 				method: 'PUT',
 				url: source,
@@ -171,77 +75,84 @@ export const addMenuRichWorkspace = () => {
 
 			showSuccess(t('text', 'Created "{name}"', { name: descriptionFile }))
 
-			if (contentNames.length === 0) {
-				// We currently have no way to reliably trigger the filelist header rendering
-				// When starting off in a new empty folder the header will only be rendered on a new PROPFIND
-				newWorkspaceCreated = file
-			}
+			context.attributes['rich-workspace-file-flat'] = fileid
+			context.attributes['rich-workspace-flat'] = ''
+
 			emit('files:node:created', file)
+			emit('files:node:updated', context)
 		},
 	})
 }
 
-let vm = null
+let FilesHeaderRichWorkspaceApp
+let FilesHeaderRichWorkspaceView
+let FilesHeaderRichWorkspaceInstance
+let FilesHeaderRichWorkspaceState
+let latestFolder
 
-export const FilesWorkspaceHeader = new Header({
+/**
+ * Helper function to check if the workspace header should be enabled
+ *
+ * @param {object} _ current folder (unused)
+ * @param {string} view current view
+ */
+function enabled(_, view) {
+	return ['files', 'favorites', 'public-share', 'personal'].includes(view.id)
+}
+
+/**
+ * @type {import('@nexcloud/files').IFileListHeader}
+ */
+export const FilesWorkspaceHeader = {
 	id: 'workspace',
 	order: 10,
+	enabled,
 
-	enabled(folder, view) {
-		return view.id === 'files'
-	},
-
-	async render(el, folder, view) {
-		if (vm) {
-			// Enforce destroying of the old rendering and rerender as the FilesListHeader calls render on every folder change
-			vm.$destroy()
-			vm = null
+	render: async (el, folder) => {
+		latestFolder = folder
+		// Import the RichWorkspace component only when needed
+		if (!FilesHeaderRichWorkspaceView) {
+			FilesHeaderRichWorkspaceView = (
+				await import('../views/RichWorkspace.vue')
+			).default
 		}
-		const hasRichWorkspace = !!folder.attributes['rich-workspace-file'] || !!newWorkspaceCreated
-		const path = newWorkspaceCreated ? dirname(newWorkspaceCreated.path) : folder.path
-		const content = newWorkspaceCreated ? '' : folder.attributes['rich-workspace']
 
-		newWorkspaceCreated = false
+		// If an instance already exists, destroy it before creating a new one
+		if (FilesHeaderRichWorkspaceInstance) {
+			FilesHeaderRichWorkspaceApp.unmount()
+			FilesHeaderRichWorkspaceApp = undefined
+			FilesHeaderRichWorkspaceInstance = undefined
+			FilesHeaderRichWorkspaceState = undefined
+			logger.debug('Destroying existing FilesHeaderRichWorkspaceInstance')
+		}
 
-		const { default: RichWorkspace } = await import('./../views/RichWorkspace.vue')
-
-		import('vue').then((module) => {
-			el.id = 'files-workspace-wrapper'
-
-			// Todo: remove this hack
-			const Vue = module.default
-			Vue.prototype.t = window.t
-			Vue.prototype.n = window.n
-			Vue.prototype.OCA = window.OCA
-
-			const View = Vue.extend(RichWorkspace)
-			vm = new View({
-				propsData: {
-					path,
-					hasRichWorkspace,
-					content,
-				},
-				store,
-			}).$mount(el)
+		FilesHeaderRichWorkspaceState = reactive({
+			content: latestFolder.attributes['rich-workspace-flat'] || '',
+			hasRichWorkspace: !!latestFolder.attributes['rich-workspace-file-flat'],
+			path: latestFolder.path || '',
 		})
+
+		// Create a new instance of the RichWorkspace component
+		FilesHeaderRichWorkspaceApp = createApp({
+			render: () => h(FilesHeaderRichWorkspaceView, { ...FilesHeaderRichWorkspaceState }),
+		})
+		FilesHeaderRichWorkspaceInstance = FilesHeaderRichWorkspaceApp.mount(el)
+		window.FilesHeaderRichWorkspaceInstance = FilesHeaderRichWorkspaceInstance
 	},
 
 	updated(folder, view) {
-		newWorkspaceCreated = false
+		latestFolder = folder
+		if (!FilesHeaderRichWorkspaceInstance) {
+			logger.error('No vue instance found for FilesWorkspaceHeader')
+			return
+		}
 
-		// Currently there is not much use in updating the vue instance props since render is called on every folder change
-		// removing the rendered element from the DOM
-		// This is only relevant if switching to a folder that has no content as then the render function is not called
-
-		const hasRichWorkspace = !!folder.attributes['rich-workspace-file']
-		vm.path = folder.path
-		vm.hasRichWorkspace = hasRichWorkspace
-		vm.content = folder.attributes['rich-workspace']
+		FilesHeaderRichWorkspaceState.hasRichWorkspace
+			= !!folder.attributes['rich-workspace-file-flat'] && enabled(folder, view)
+		FilesHeaderRichWorkspaceState.content
+			= folder.attributes['rich-workspace-flat'] || ''
+		FilesHeaderRichWorkspaceState.path = folder.path || ''
 	},
-})
-
-export {
-	registerFileActionFallback,
-	registerFileCreate,
-	FILE_ACTION_IDENTIFIER,
 }
+
+export { FILE_ACTION_IDENTIFIER }

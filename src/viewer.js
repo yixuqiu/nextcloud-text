@@ -1,50 +1,36 @@
 /**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { logger } from './helpers/logger.js'
+import { t } from '@nextcloud/l10n'
+import { registerHandler } from '@nextcloud/viewer'
 import { openMimetypesMarkdown, openMimetypesPlainText } from './helpers/mime.js'
 
-__webpack_nonce__ = btoa(OC.requestToken) // eslint-disable-line
-__webpack_public_path__ = OC.linkTo('text', 'js/') // eslint-disable-line
+import 'vite/modulepreload-polyfill'
 
-/**
- * Wrapper for async registration of ViewerComponent.
- * Note: it should be named function - the name is used for component registration.
- *
- * @return {Promise<import('./components/ViewerComponent.vue')>} ViewerComponent
- */
-function AsyncTextViewerComponent() {
-	return import('./components/ViewerComponent.vue')
-}
+const tagName = 'text-viewer'
+const mimes = new Set([...openMimetypesMarkdown, ...openMimetypesPlainText])
+const markdownMimes = new Set(openMimetypesMarkdown)
 
-if (typeof OCA.Viewer === 'undefined') {
-	logger.error('Viewer app is not installed')
-} else {
-	OCA.Viewer.registerHandler({
-		id: 'text',
-		mimes: [...openMimetypesMarkdown, ...openMimetypesPlainText],
-		component: AsyncTextViewerComponent,
-		group: null,
-		theme: 'default',
-		canCompare: true,
-	})
-}
+// This script runs on every page: the editor is only loaded, and its element
+// defined, the first time the viewer opens a text file
+registerHandler({
+	id: 'text',
+	displayName: t('text', 'Text'),
+	tagName,
+	enabled: (nodes) => nodes.every((node) => mimes.has(node.mime ?? '')),
+	onInit: async () => {
+		const [{ defineCustomElement }, { default: TextViewerWrapper }] = await Promise.all([
+			import('vue'),
+			import('./views/TextViewerWrapper.vue'),
+		])
+		if (window.customElements.get(tagName) === undefined) {
+			window.customElements.define(tagName, defineCustomElement(TextViewerWrapper, { shadowRoot: false }))
+		}
+	},
+	theme: 'default',
+	canCompare: () => true,
+	canShowDifferences: (files) => files.every((file) => markdownMimes.has(file.mime ?? '')),
+	canSlideshow: false,
+})

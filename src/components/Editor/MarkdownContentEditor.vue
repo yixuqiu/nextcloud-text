@@ -1,196 +1,162 @@
 <!--
-  - @copyright Copyright (c) 2022 Julius Härtl <jus@bitgrid.net>
-  -
-  - @author Julius Härtl <jus@bitgrid.net>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -->
+  - SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
-	<Wrapper :content-loaded="true"
-		:show-outline-outside="showOutlineOutside"
-		@outline-toggled="outlineToggled">
+	<EditorWrapper contentLoaded>
 		<MainContainer>
-			<MenuBar v-if="!readOnly" :autohide="false" />
-			<slot v-else name="readonlyBar">
-				<ReadonlyBar />
-			</slot>
-			<ContentContainer />
+			<template v-if="!hideMenuBar">
+				<MenuBar v-if="!readOnly" :autohide="false" />
+				<slot v-else name="readonlyBar">
+					<ReadonlyBar />
+				</slot>
+			</template>
+			<ContentContainer :readOnly="readOnly" />
 		</MainContainer>
-	</Wrapper>
+	</EditorWrapper>
 </template>
 
 <script>
-import Wrapper from './Wrapper.vue'
-import MainContainer from './MainContainer.vue'
-import MenuBar from '../Menu/MenuBar.vue'
-import { Editor } from '@tiptap/core'
-/* eslint-disable import/no-named-as-default */
-import History from '@tiptap/extension-history'
 import { getCurrentUser } from '@nextcloud/auth'
-import { ATTACHMENT_RESOLVER, EDITOR, IS_RICH_EDITOR } from '../Editor.provider.js'
-import { createMarkdownSerializer } from '../../extensions/Markdown.js'
-import AttachmentResolver from '../../services/AttachmentResolver.js'
-import markdownit from '../../markdownit/index.js'
-import { RichText } from '../../extensions/index.js'
+import { Editor } from '@tiptap/core'
+import { UndoRedo } from '@tiptap/extensions'
+import { markRaw, provide, shallowRef, watch } from 'vue'
+import MenuBar from '../Menu/MenuBar.vue'
 import ReadonlyBar from '../Menu/ReadonlyBar.vue'
 import ContentContainer from './ContentContainer.vue'
+import EditorWrapper from './EditorWrapper.vue'
+import MainContainer from './MainContainer.vue'
+import { provideEditor } from '../../composables/useEditor.ts'
+import { editorFlagsKey } from '../../composables/useEditorFlags.ts'
+import { provideEditorHeadings } from '../../composables/useEditorHeadings.ts'
+import { useEditorMethods } from '../../composables/useEditorMethods.ts'
+import { provideEditorWidth } from '../../composables/useEditorWidth.ts'
+import { useOpenLinkHandler } from '../../composables/useOpenLinkHandler.ts'
+import { FocusTrap, RichText } from '../../extensions/index.js'
+import { createMarkdownSerializer } from '../../extensions/Markdown.js'
+import AttachmentResolver from '../../services/AttachmentResolver.js'
+import { ATTACHMENT_RESOLVER } from '../Editor.provider.ts'
 
 export default {
 	name: 'MarkdownContentEditor',
-	components: { ContentContainer, ReadonlyBar, MenuBar, MainContainer, Wrapper },
-	provide() {
-		const val = {}
-
-		Object.defineProperties(val, {
-			[EDITOR]: {
-				get: () => this.$editor,
-			},
-			[ATTACHMENT_RESOLVER]: {
-				get: () => this.$attachmentResolver ?? null,
-			},
-			[IS_RICH_EDITOR]: {
-				get: () => true,
-			},
-		})
-
-		return val
-	},
+	components: { ContentContainer, ReadonlyBar, MenuBar, MainContainer, EditorWrapper },
 
 	props: {
 		fileId: {
 			type: Number,
 			default: null,
 		},
+
 		content: {
 			type: String,
 			required: true,
 		},
+
 		readOnly: {
 			type: Boolean,
-			default: false,
 		},
+
 		relativePath: {
 			type: String,
 			default: '',
 		},
+
 		shareToken: {
 			type: String,
 			default: null,
 		},
-		showOutlineOutside: {
+
+		hideMenuBar: {
+			type: Boolean,
+		},
+
+		noLazyImages: {
 			type: Boolean,
 			default: false,
 		},
 	},
-	emits: ['update:content'],
 
-	computed: {
-		htmlContent() {
-			return this.renderHtml(this.content)
-		},
-	},
+	emits: ['ready', 'update:content'],
 
-	watch: {
-		content() {
-			this.updateContent()
-		},
+	setup(props) {
+		const { openLinkHandler } = useOpenLinkHandler()
+		const extensions = [
+			RichText.configure({
+				extensions: [UndoRedo],
+				openLink: openLinkHandler.openLink,
+				noLazyImages: props.noLazyImages,
+			}),
+			FocusTrap,
+		]
+		const editor = markRaw(new Editor({ extensions }))
+
+		const { setEditable, setContent } = useEditorMethods(editor)
+		const { updateHeadings } = provideEditorHeadings(editor)
+		watch(
+			() => props.content,
+			(content) => {
+				setContent(content)
+			},
+		)
+
+		setEditable(!props.readOnly)
+		watch(
+			() => props.readOnly,
+			(readOnly) => {
+				setEditable(!readOnly)
+			},
+		)
+
+		provide(editorFlagsKey, {
+			isPublic: false,
+			isRichEditor: true,
+			isRichWorkspace: false,
+			hasTableOfContents: true,
+		})
+		provideEditor(editor)
+
+		const { applyEditorWidth } = provideEditorWidth(true)
+		applyEditorWidth()
+
+		const attachmentResolver = shallowRef(null)
+		provide(ATTACHMENT_RESOLVER, attachmentResolver)
+
+		return { attachmentResolver, editor, setContent, updateHeadings }
 	},
 
 	created() {
-		this.$editor = this.createEditor()
-		this.$editor.setEditable(!this.readOnly)
-		if (this.fileId) {
-			this.$attachmentResolver = new AttachmentResolver({
-				currentDirectory: this.relativePath?.match(/.*\//),
-				user: getCurrentUser(),
-				shareToken: this.shareToken,
-				fileId: this.fileId,
+		// Set content after the setup function
+		// as it may render other vue components such as preview toggle
+		// which breaks the context of the setup function.
+		this.setContent(this.content, { addToHistory: false })
+		this.updateHeadings()
+		this.editor.on('create', () => {
+			this.$emit('ready')
+		})
+		this.editor.on('update', ({ editor }) => {
+			const markdown = createMarkdownSerializer(editor.schema).serialize(editor.state.doc)
+			this.$emit('update:content', {
+				json: editor.state.doc,
+				markdown,
 			})
-		}
+		})
+		this.attachmentResolver = new AttachmentResolver({
+			currentDirectory: this.relativePath?.match(/.*\//),
+			user: getCurrentUser(),
+			shareToken: this.shareToken,
+			fileId: this.fileId,
+		})
 	},
 
-	updated() {
-		this.$editor.setEditable(!this.readOnly)
-	},
-
-	beforeDestroy() {
-		this.$editor.destroy()
-	},
-
-	methods: {
-		renderHtml(content) {
-			return markdownit.render(content)
-		},
-		extensions() {
-			return [
-				RichText.configure({
-					component: this,
-					extensions: [
-						History,
-					],
-				}),
-			]
-		},
-		createEditor() {
-			return new Editor({
-				content: this.htmlContent,
-				extensions: this.extensions(),
-				onUpdate: ({ editor }) => {
-					const markdown = (createMarkdownSerializer(this.$editor.schema)).serialize(editor.state.doc)
-					this.emit('update:content', {
-						json: editor.state.doc,
-						markdown,
-					})
-				},
-				onCreate: ({ editor }) => {
-					this.$emit('ready')
-					this.$parent.$emit('ready')
-				},
-			})
-		},
-
-		updateContent() {
-			this.$editor.commands.setContent(this.htmlContent, true)
-		},
-
-		outlineToggled(visible) {
-			this.emit('outline-toggled', visible)
-		},
-
-		/**
-		 * Wrapper to emit events on our own and the parent component
-		 *
-		 * The parent might be either the root component of src/editor.js or Viewer.vue which collectives currently uses
-		 *
-		 * Ideally this would be done in a generic way in the src/editor.js API abstraction, but it seems
-		 * that there is no proper way to pass any received event along in vue, the only option I've found
-		 * in https://github.com/vuejs/vue/issues/230 feels too hacky to me, so we just emit twice for now
-		 *
-		 * @param {string} event The event name
-		 * @param {any} data The data to pass along
-		 */
-		emit(event, data) {
-			this.$emit(event, data)
-			this.$parent?.$emit(event, data)
-		},
+	beforeUnmount() {
+		this.editor.destroy()
 	},
 }
+
 </script>
 
-<style scoped>
-
+<style lang="scss">
+@use './../../css/prosemirror';
+@use './../../css/print';
 </style>

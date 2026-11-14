@@ -1,17 +1,25 @@
-import TipTapMention from '@tiptap/extension-mention'
-import Mention from './Mention.vue'
-import { VueNodeViewRenderer } from '@tiptap/vue-2'
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 import { mergeAttributes } from '@tiptap/core'
+import TipTapMention from '@tiptap/extension-mention'
+import { VueNodeViewRenderer } from '@tiptap/vue-3'
+import MentionView from './MentionView.vue'
 
 export default TipTapMention.extend({
 	parseHTML() {
 		return [
 			{
 				tag: 'span[data-type="user"]',
-				getAttrs: element => {
+				getAttrs: (element) => {
 					return {
 						id: decodeURIComponent(element.getAttribute('data-id')),
-						label: element.innerText || element.textContent || element.getAttribute('data-label'),
+						label:
+							element.innerText
+							|| element.textContent
+							|| element.getAttribute('data-label'),
 					}
 				},
 				priority: 100,
@@ -22,7 +30,11 @@ export default TipTapMention.extend({
 	renderHTML({ node, HTMLAttributes }) {
 		return [
 			'span',
-			mergeAttributes({ 'data-type': 'user', class: 'mention' }, this.options.HTMLAttributes, HTMLAttributes),
+			mergeAttributes(
+				{ 'data-type': 'user', class: 'mention' },
+				this.options.HTMLAttributes,
+				HTMLAttributes,
+			),
 			this.options.renderHTML({
 				options: this.options,
 				node,
@@ -31,12 +43,10 @@ export default TipTapMention.extend({
 	},
 
 	addNodeView() {
-		return VueNodeViewRenderer(Mention)
+		return VueNodeViewRenderer(MentionView)
 	},
 
 	toMarkdown(state, node) {
-		state.write(' ')
 		state.write(`@[${node.attrs.label}](mention://user/${encodeURIComponent(node.attrs.id)})`)
-		state.write(' ')
 	},
 })

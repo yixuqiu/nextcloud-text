@@ -1,29 +1,14 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text\DirectEditing;
 
 use OCA\Text\AppInfo\Application;
+use OCA\Text\Context\FileContextFactory;
 use OCA\Text\Service\ApiService;
 use OCA\Text\Service\InitialStateProvider;
 use OCP\AppFramework\Http\NotFoundResponse;
@@ -34,24 +19,21 @@ use OCP\DirectEditing\IToken;
 use OCP\Files\InvalidPathException;
 use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
+use OCP\IAppConfig;
 use OCP\IL10N;
+use OCP\IUserManager;
 use OCP\Util;
 
 class TextDirectEditor implements IEditor {
 
-	/** @var IL10N */
-	private $l10n;
-
-	/** @var InitialStateProvider */
-	private $initialStateProvider;
-
-	/** @var ApiService */
-	private $apiService;
-
-	public function __construct(IL10N $l10n, InitialStateProvider $initialStateProvider, ApiService $apiService) {
-		$this->l10n = $l10n;
-		$this->initialStateProvider = $initialStateProvider;
-		$this->apiService = $apiService;
+	public function __construct(
+		private readonly IL10N $l10n,
+		private readonly InitialStateProvider $initialStateProvider,
+		private readonly ApiService $apiService,
+		private readonly IAppConfig $appConfig,
+		private readonly FileContextFactory $fileContextFactory,
+		private readonly IUserManager $userManager,
+	) {
 	}
 
 	/**
@@ -104,6 +86,7 @@ class TextDirectEditor implements IEditor {
 			'text/x-h',
 			'text/x-java-source',
 			'text/x-ldif',
+			'text/x-nfo',
 			'text/x-python',
 			'text/x-shellscript',
 		];
@@ -125,7 +108,7 @@ class TextDirectEditor implements IEditor {
 	 */
 	public function getCreators(): array {
 		return [
-			new TextDocumentCreator($this->l10n),
+			new TextDocumentCreator($this->l10n, $this->appConfig),
 		];
 	}
 
@@ -152,7 +135,13 @@ class TextDirectEditor implements IEditor {
 	public function open(IToken $token): Response {
 		$token->useTokenScope();
 		try {
-			$session = $this->apiService->create($token->getFile()->getId());
+			$user = $this->userManager->get($token->getUser());
+			if ($user === null) {
+				throw new NotFoundException();
+			}
+			$file = $token->getFile();
+			$context = $this->fileContextFactory->build($user, 'file', $file->getId(), $file);
+			$session = $this->apiService->create($context, null);
 			$this->initialStateProvider->provideFile([
 				'fileId' => $token->getFile()->getId(),
 				'mimetype' => $token->getFile()->getMimeType(),
@@ -161,10 +150,9 @@ class TextDirectEditor implements IEditor {
 			$this->initialStateProvider->provideDirectEditToken($token->getToken());
 			$this->initialStateProvider->provideState();
 			Util::addScript('text', 'text-text');
+			Util::addStyle('text', 'text-text');
 			return new TemplateResponse('text', 'main', [], 'base');
-		} catch (InvalidPathException $e) {
-		} catch (NotFoundException $e) {
-		} catch (NotPermittedException $e) {
+		} catch (InvalidPathException|NotFoundException|NotPermittedException) {
 		}
 		return new NotFoundResponse();
 	}

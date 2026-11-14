@@ -1,29 +1,13 @@
 <!--
-  - @copyright Copyright (c) 2021 Jonas <jonas@freesources.org>
-  -
-  - @author Jonas <jonas@freesources.org>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -
-  -->
+  - SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
 	<div class="emoji-list">
 		<template v-if="hasResults">
-			<div v-for="(emojiObject, index) in items"
+			<div
+				v-for="(emojiObject, index) in items"
 				:key="index"
 				class="emoji-list__item"
 				:class="{ 'is-selected': index === selectedIndex }"
@@ -41,8 +25,8 @@
 </template>
 
 <script>
-import { translate as t } from '@nextcloud/l10n'
-import { emojiAddRecent } from '@nextcloud/vue'
+import { t } from '@nextcloud/l10n'
+import { emojiAddRecent } from '@nextcloud/vue/functions/emoji'
 
 export default {
 	name: 'EmojiList',
@@ -51,36 +35,46 @@ export default {
 			type: Array,
 			required: true,
 		},
+
 		command: {
 			type: Function,
 			required: true,
 		},
 	},
+
 	data() {
 		return {
 			selectedIndex: 0,
 		}
 	},
+
 	computed: {
 		hasResults() {
 			return this.items.length > 0
 		},
+
 		itemHeight() {
 			return this.$el.scrollHeight / this.items.length
 		},
+
 		itemInsideScrollView() {
 			// If upper border of item is bigger or equal than scroll top
 			// and lower end of item is smaller or equal than scroll bottom
-			return this.selectedIndex * this.itemHeight >= this.$el.scrollTop
-				&& (this.selectedIndex + 1) * this.itemHeight <= this.$el.scrollTop + this.$el.clientHeight
+			return (
+				this.selectedIndex * this.itemHeight >= this.$el.scrollTop
+				&& (this.selectedIndex + 1) * this.itemHeight
+				<= this.$el.scrollTop + this.$el.clientHeight
+			)
 		},
 	},
+
 	watch: {
 		items() {
 			this.selectedIndex = 0
 			this.$el.scrollTop = 0
 		},
 	},
+
 	methods: {
 		t,
 		onKeyDown({ event }) {
@@ -90,7 +84,8 @@ export default {
 			}
 
 			if (event.key === 'ArrowUp') {
-				this.selectedIndex = ((this.selectedIndex + this.items.length) - 1) % this.items.length
+				this.selectedIndex
+					= (this.selectedIndex + this.items.length - 1) % this.items.length
 				if (!this.itemInsideScrollView) {
 					this.$el.scrollTop = this.selectedIndex * this.itemHeight
 				}
@@ -100,7 +95,9 @@ export default {
 			if (event.key === 'ArrowDown') {
 				this.selectedIndex = (this.selectedIndex + 1) % this.items.length
 				if (!this.itemInsideScrollView) {
-					this.$el.scrollTop = (this.selectedIndex + 1) * this.itemHeight - this.$el.clientHeight
+					this.$el.scrollTop
+						= (this.selectedIndex + 1) * this.itemHeight
+							- this.$el.clientHeight
 				}
 				return true
 			}
@@ -126,45 +123,45 @@ export default {
 </script>
 
 <style scoped lang="scss">
-	.emoji-list {
-		border-radius: var(--border-radius);
-		background-color: var(--color-main-background);
-		box-shadow: 0 1px 5px var(--color-box-shadow);
-		overflow: auto;
+.emoji-list {
+	border-radius: var(--border-radius);
+	background-color: var(--color-main-background);
+	box-shadow: 0 1px 5px var(--color-box-shadow);
+	overflow: auto;
 
-		min-width: 200px;
-		max-width: 200px;
-		padding: 4px;
-		// Show maximum 5 entries and a half to show scroll
-		max-height: 35.5px * 5 + 18px;
-		margin: 5px 0;
+	min-width: 200px;
+	max-width: 200px;
+	padding: 4px;
+	// Show maximum 5 entries and a half to show scroll
+	max-height: 35.5px * 5 + 18px;
+	margin: 5px 0;
 
-		&__item {
-			border-radius: 8px;
-			padding: 4px 8px;
-			margin-bottom: 4px;
-			opacity: 0.8;
-			cursor: pointer;
+	&__item {
+		border-radius: 8px;
+		padding: 4px 8px;
+		margin-bottom: 4px;
+		opacity: 0.8;
+		cursor: pointer;
 
-			// Take care of long names
-			white-space: nowrap;
-			overflow: hidden;
-			text-overflow: ellipsis;
+		// Take care of long names
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 
-			&:last-child {
-				margin-bottom: 0;
-			}
+		&:last-child {
+			margin-bottom: 0;
+		}
 
-			&__emoji {
-				padding-right: 8px;
-			}
+		&__emoji {
+			padding-right: 8px;
+		}
 
-			&.is-selected,
-			&:focus,
-			&:hover {
-				opacity: 1;
-				background-color: var(--color-primary-element-light);
-			}
+		&.is-selected,
+		&:focus,
+		&:hover {
+			opacity: 1;
+			background-color: var(--color-primary-element-light);
 		}
 	}
+}
 </style>

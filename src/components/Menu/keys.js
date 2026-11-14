@@ -1,4 +1,10 @@
-const isMac = (navigator.userAgent.includes('Mac'))
+/**
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+import { t } from '@nextcloud/l10n'
+const isMac = navigator.userAgent.includes('Mac')
 
 const MODIFIERS = {
 	Mod: isMac ? 'Meta' : 'Control',
@@ -12,13 +18,10 @@ const MODIFIERS = {
 }
 
 const TRANSLATIONS = {
-	[MODIFIERS.Mod]: isMac ? t('text', 'Command') : t('text', 'Control'),
+	[MODIFIERS.Mod]: isMac ? t('text', 'Command') : t('text', 'Ctrl'),
 	[MODIFIERS.Control]: t('text', 'Ctrl'),
 	[MODIFIERS.Alt]: t('text', isMac ? 'Option' : 'Alt'),
 	[MODIFIERS.Shift]: t('text', 'Shift'),
 }
 
-export {
-	MODIFIERS,
-	TRANSLATIONS,
-}
+export { MODIFIERS, TRANSLATIONS }

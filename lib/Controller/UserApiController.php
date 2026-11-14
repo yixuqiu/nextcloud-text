@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Text\Controller;
 
 use OCA\Text\Middleware\Attribute\RequireDocumentSession;
@@ -23,7 +28,7 @@ class UserApiController extends ApiController implements ISessionAwareController
 		IRequest $request,
 		private SessionService $sessionService,
 		private ISearch $collaboratorSearch,
-		private IUserManager $userManager
+		private IUserManager $userManager,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -32,6 +37,7 @@ class UserApiController extends ApiController implements ISessionAwareController
 	#[NoAdminRequired]
 	#[RequireDocumentSession]
 	public function index(string $filter = '', int $limit = 5): DataResponse {
+		$limit = min($limit, 50);
 		$sessions = $this->sessionService->getAllSessions($this->getSession()->getDocumentId());
 
 		$users = [];
@@ -50,7 +56,7 @@ class UserApiController extends ApiController implements ISessionAwareController
 
 		if (!$this->getSession()->isGuest()) {
 			// Add other users to the autocomplete list
-			[$result] = $this->collaboratorSearch->search($filter, [IShare::TYPE_USER], false, $limit, 0);
+			[$result] = $this->collaboratorSearch->filteredSearch($filter, [IShare::TYPE_USER], false, 'file', null, $limit, 0);
 			$userSearch = array_merge($result['users'], $result['exact']['users']);
 
 			foreach ($userSearch as ['label' => $label, 'value' => $value]) {

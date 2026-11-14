@@ -1,72 +1,143 @@
 <!--
-  - @copyright Copyright (c) 2022 Max <max@nextcloud.com>
-  -
-  - @author Max <max@nextcloud.com>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -
-  -->
+  - SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
-	<NodeViewWrapper data-text-el="table-view" class="table-wrapper">
-		<NcActions v-if="editor.isEditable"
-			force-menu
+	<NodeViewWrapper
+		data-text-el="table-view"
+		class="table-wrapper"
+		:class="{ focused: isFocused, editable: isEditable }">
+		<div class="table-scroll">
+			<NodeViewContent class="content" as="table" />
+		</div>
+		<NcActions
+			v-if="isEditable"
+			forceMenu
+			size="small"
 			data-text-table-actions="settings"
 			class="table-settings">
 			<template #icon>
 				<TableSettings />
 			</template>
-			<NcActionButton data-text-table-action="delete"
-				close-after-click
+			<NcActionButton
+				data-text-table-action="delete"
+				closeAfterClick
 				@click="deleteNode">
 				<template #icon>
-					<Delete />
+					<TrashCan />
 				</template>
 				{{ t('text', 'Delete this table') }}
 			</NcActionButton>
 		</NcActions>
-		<NodeViewContent class="content" as="table" />
-		<div class="clearfix" />
+		<NcButton
+			v-if="isEditable"
+			class="table-add-column"
+			size="small"
+			:aria-label="t('text', 'Add column after')"
+			:title="t('text', 'Add column after')"
+			@click="addColumnAfter">
+			<template #icon>
+				<TableAddColumnAfter />
+			</template>
+		</NcButton>
+		<NcButton
+			v-if="isEditable"
+			class="table-add-row"
+			size="small"
+			wide
+			:aria-label="t('text', 'Add row below')"
+			:title="t('text', 'Add row below')"
+			@click="addRowAfter">
+			<template #icon>
+				<TableAddRowAfter />
+			</template>
+		</NcButton>
 	</NodeViewWrapper>
 </template>
 
 <script>
-import { NodeViewWrapper, NodeViewContent } from '@tiptap/vue-2'
-import { NcActions, NcActionButton } from '@nextcloud/vue'
-import { TableSettings, Delete } from '../../components/icons.js'
+import { t } from '@nextcloud/l10n'
+import { NodeViewContent, nodeViewProps, NodeViewWrapper } from '@tiptap/vue-3'
+import NcActionButton from '@nextcloud/vue/components/NcActionButton'
+import NcActions from '@nextcloud/vue/components/NcActions'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import {
+	TableAddColumnAfter,
+	TableAddRowAfter,
+	TableSettings,
+	TrashCan,
+} from '../../components/icons.js'
 
 export default {
 	name: 'TableView',
 	components: {
+		TableAddColumnAfter,
+		TableAddRowAfter,
 		NcActionButton,
 		NcActions,
+		NcButton,
 		NodeViewWrapper,
 		NodeViewContent,
 		TableSettings,
-		Delete,
+		TrashCan,
 	},
-	props: {
-		editor: {
-			type: Object,
-			required: true,
+
+	props: nodeViewProps,
+
+	data() {
+		return {
+			isEditable: false,
+			isFocused: false,
+		}
+	},
+
+	beforeMount() {
+		this.isEditable = this.editor.isEditable
+		this.editor.on('selectionUpdate', this.onSelectionUpdate)
+		this.editor.on('update', this.onUpdate)
+	},
+
+	beforeUnmount() {
+		this.editor.off('update', this.onUpdate)
+		this.editor.off('selectionUpdate', this.onSelectionUpdate)
+	},
+
+	methods: {
+		onUpdate({ editor }) {
+			this.isEditable = editor.isEditable
 		},
-		deleteNode: {
-			type: Function,
-			required: true,
+
+		onSelectionUpdate({ editor }) {
+			const startOfCurrentNode = this.getPos()
+			const endOfCurrentNode = startOfCurrentNode + this.node.nodeSize
+			const { from, to } = editor.state.selection
+			this.isFocused = from >= startOfCurrentNode && to <= endOfCurrentNode
 		},
+
+		addColumnAfter() {
+			const headerRowNode = this.node.firstChild
+			this.editor
+				.chain()
+				.focus()
+				.setTextSelection(this.getPos() + headerRowNode.nodeSize - 1)
+				.addColumnAfter()
+				.setTextSelection(this.getPos() + headerRowNode.nodeSize + 1)
+				.run()
+		},
+
+		addRowAfter() {
+			const lastRowNode = this.node.lastChild
+			this.editor
+				.chain()
+				.focus()
+				.setTextSelection(this.getPos() + this.node.nodeSize - lastRowNode.nodeSize + 1)
+				.addRowAfter()
+				.setTextSelection(this.getPos() + this.node.nodeSize + 2)
+				.run()
+		},
+
+		t,
 	},
 }
 </script>
@@ -74,26 +145,81 @@ export default {
 <style scoped lang="scss">
 .table-wrapper {
 	position: relative;
-	overflow-x: auto;
-}
+	// Leaves a clickable gap before the table for the gap cursor when it
+	// follows another table or node view. Collapses with paragraph margins.
+	margin-top: 1em;
 
-.clearfix {
-	clear: both;
-}
-
-table {
-	float: left;
-}
-
-.table-settings {
-	padding-left: 3px;
-	opacity: .5;
-	position: absolute;
-	top: 0;
-	right: 3px;
-
+	&.focused,
 	&:hover {
-		opacity: 1;
+		.table-add-column,
+		.table-add-row {
+			visibility: visible;
+		}
+	}
+
+	.table-scroll {
+		overflow-x: auto;
+	}
+
+	&.editable {
+		.table-scroll {
+			width: calc(100% - var(--clickable-area-small) - 4px);
+		}
+	}
+
+	.table-settings {
+		z-index: 3;
+		padding-left: 3px;
+		position: absolute;
+		top: calc((var(--default-clickable-area) - var(--clickable-area-small)) / 2);
+		right: calc(var(--clickable-area-small) + 4px);
+		background-color: var(--color-main-background);
+
+		:deep(button) {
+			opacity: 0.5;
+		}
+
+		&:hover,
+		&:active,
+		&:focus,
+		&:focus-within {
+			:deep(button) {
+				opacity: 1;
+			}
+		}
+	}
+
+	.table-add-column {
+		visibility: hidden;
+		padding-left: 3px;
+		opacity: 0.5;
+		position: absolute;
+		top: var(--default-clickable-area);
+		right: 0;
+		bottom: calc(var(--clickable-area-small) + 8px);
+		margin-top: 0 !important;
+
+		&:hover {
+			opacity: 1;
+		}
+	}
+
+	.table-add-row {
+		visibility: hidden;
+		padding-left: 3px;
+		opacity: 0.5;
+		position: absolute;
+		left: 0;
+		bottom: calc(2 * var(--default-grid-baseline));
+
+		&:hover {
+			opacity: 1;
+		}
+	}
+
+	// Needed to overwrite forced button width with nextcloud-vue v9
+	&.editable .table-add-row.button-vue {
+		width: calc(100% - var(--clickable-area-small) - 4px);
 	}
 }
 </style>

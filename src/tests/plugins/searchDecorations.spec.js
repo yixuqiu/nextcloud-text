@@ -1,0 +1,134 @@
+/**
+ * SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+import Mentions from '../../extensions/Mention.js'
+import { highlightResults, runSearch } from '../../plugins/searchDecorations.js'
+import createCustomEditor from '../testHelpers/createCustomEditor.ts'
+
+describe('search plugin', () => {
+	it('finds no matches in empty document', () => {
+		const expected = {
+			results: [],
+			total: 0,
+			index: 0,
+		}
+
+		testSearch('', 'hello', expected)
+	})
+
+	it('finds no matches for empty search query', () => {
+		const expected = {
+			results: [],
+			total: 0,
+			index: 0,
+		}
+
+		testSearch('<p>Hallo Welt</p>', '', expected)
+	})
+
+	it('finds matches regardless of case', () => {
+		const expected = {
+			results: [
+				{ from: 1, to: 5 },
+				{ from: 23, to: 27 },
+				{ from: 37, to: 41 },
+			],
+			total: 3,
+			index: 0,
+		}
+
+		testSearch(
+			'<p>CATS birds crocodiles cats platypus CAts</p>',
+			'cAtS',
+			expected,
+		)
+	})
+
+	it('finds matches in one block', () => {
+		const expected = {
+			results: [
+				{ from: 1, to: 4 },
+				{ from: 23, to: 26 },
+			],
+			total: 2,
+			index: 0,
+		}
+
+		testSearch('<p>cat dinosaur bird dog cat</p>', 'cat', expected)
+	})
+
+	it('finds matches spanning different marks', () => {
+		const expected = {
+			results: [{ from: 1, to: 11 }],
+			total: 1,
+			index: 0,
+		}
+
+		testSearch('<p>test<strong>string</strong> other</p>', 'teststring', expected)
+	})
+
+	it('finds matches after an inline node', () => {
+		const doc
+			= '<p>a<span class="mention" data-type="user" data-id="jane.doe" data-label="Jane Doe">Jane Doe</span>teststring</p>'
+
+		const expected = {
+			results: [{ from: 3, to: 13 }],
+		}
+
+		testSearch(doc, 'teststring', expected)
+	})
+
+	it('finds matches in separate blocks', () => {
+		const doc
+			= '<p>cat dinosaur bird dog cat</p>'
+				+ '<p>dinosaur cat bird <i>dinosaur cat</i></p>'
+
+		const expected = {
+			results: [
+				{ from: 1, to: 4 },
+				{ from: 23, to: 26 },
+				{ from: 37, to: 40 },
+				{ from: 55, to: 58 },
+			],
+			total: 4,
+			index: 0,
+		}
+
+		testSearch(doc, 'cat', expected)
+	})
+
+	it('finds matches with mentions', () => {
+		const doc
+			= '<p>janes task, mention <span class="mention" data-type="user" data-id="jane.doe" data-label="Jane Doe">Jane Doe</span></p>'
+
+		const expected = {
+			results: [
+				{ from: 1, to: 5 },
+				{ from: 21, to: 22, mention: true },
+			],
+		}
+
+		testSearch(doc, 'jane', expected)
+	})
+
+	it('finds matches with mentions with @', () => {
+		const doc
+			= '<p>janes task, mention <span class="mention" data-type="user" data-id="jane.doe" data-label="Jane Doe">Jane Doe</span></p>'
+
+		const expected = {
+			results: [{ from: 21, to: 22, mention: true }],
+		}
+		testSearch(doc, '@jane', expected)
+	})
+})
+
+function testSearch(content, query, expectedSearchResults) {
+	const editor = createCustomEditor(content, [Mentions])
+	const doc = editor.state.doc
+	const searched = runSearch(doc, query)
+	expect(searched).toMatchObject(expectedSearchResults)
+	expect(highlightResults(doc, searched.results)).toEqual(highlightResults(doc, expectedSearchResults.results))
+	editor.destroy()
+}

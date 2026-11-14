@@ -1,53 +1,44 @@
 /**
- * @copyright Copyright (c) 2022 Max <max@nextcloud.com>
- *
- * @author Max <max@nextcloud.com>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { generateUrl, generateRemoteUrl } from '@nextcloud/router'
+import axios from '@nextcloud/axios'
+import { generateRemoteUrl, generateUrl } from '@nextcloud/router'
 import pathNormalize from 'path-normalize'
 
-import store from '../store/index.js'
-
-const setAttachmentList = (val) => store.dispatch('text/setAttachmentList', val)
-const findAttachment = store.getters['text/findAttachment']
-
 export default class AttachmentResolver {
-
 	#session
 	#user
 	#shareToken
 	#currentDirectory
-	#documentId
+	#fileId
 	#initAttachmentListPromise
+	#attachmentList = []
 
 	constructor({ session, user, shareToken, currentDirectory, fileId }) {
 		this.#session = session
 		this.#user = user
 		this.#shareToken = shareToken
 		this.#currentDirectory = currentDirectory
-		this.#documentId = fileId ?? session.documentId
-		this.#initAttachmentListPromise = this.#updateAttachmentList()
+		this.#fileId = fileId
 	}
 
 	async #updateAttachmentList() {
-		return setAttachmentList({ documentId: this.#documentId, session: this.#session, shareToken: this.#shareToken })
+		const response = await axios.post(generateUrl('/apps/text/attachments'), {
+			documentId: this.#session?.documentId,
+			sessionId: this.#session?.id,
+			sessionToken: this.#session?.token,
+			shareToken: this.#shareToken,
+			fileId: this.#fileId,
+		})
+		this.#attachmentList = response.data
+	}
+
+	#findAttachment(fileName) {
+		// Attachment srcs may use NFD (e.g. uploads from macOS), the attachment list uses NFC
+		const normalizedName = fileName.normalize('NFC')
+		return this.#attachmentList.find((a) => a.name.normalize('NFC') === normalizedName)
 	}
 
 	/*
@@ -63,20 +54,19 @@ export default class AttachmentResolver {
 		if (src.match(directoryRegexp)) {
 			const imageFileName = decodeURIComponent(src.replace(directoryRegexp, '').split('?')[0])
 
-			// Wait until attachment list got fetched (initialized by constructor)
+			this.#initAttachmentListPromise ??= this.#updateAttachmentList()
 			await this.#initAttachmentListPromise
-			attachment = findAttachment(imageFileName)
+			attachment = this.#findAttachment(imageFileName)
 
 			if (fallback && !attachment) {
 				// Update attachments list. Needed if attachments gets added to the session
 				await this.#updateAttachmentList()
-				attachment = findAttachment(imageFileName)
+				attachment = this.#findAttachment(imageFileName)
 			}
 
 			if (attachment) {
 				return attachment
 			}
-
 		}
 
 		// Direct URLs
@@ -105,7 +95,10 @@ export default class AttachmentResolver {
 	#davUrl(src) {
 		if (this.#user) {
 			const uid = this.#user.uid
-			const encoded = this.#filePath(src).split('/').map(encodeURIComponent).join('/')
+			const encoded = this.#filePath(src)
+				.split('/')
+				.map(encodeURIComponent)
+				.join('/')
 			return generateRemoteUrl(`dav/files/${uid}${encoded}`)
 		}
 
@@ -130,14 +123,10 @@ export default class AttachmentResolver {
 	}
 
 	#filePath(src) {
-		const f = [
-			this.#currentDirectory,
-			this.#relativePath(src),
-		].join('/')
+		const f = [this.#currentDirectory, this.#relativePath(src)].join('/')
 
 		return pathNormalize(f)
 	}
-
 }
 
 /**
@@ -147,7 +136,9 @@ export default class AttachmentResolver {
  * @param {string} src - the url to check
  */
 function isDirectUrl(src) {
-	return src.startsWith('http://')
+	return (
+		src.startsWith('http://')
 		|| src.startsWith('https://')
 		|| src.startsWith('data:')
+	)
 }

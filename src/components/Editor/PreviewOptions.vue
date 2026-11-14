@@ -1,90 +1,163 @@
 <!--
-  - @copyright Copyright (c) 2024 Max Wiehle <max@nextcloud.com>
-  -
-  - @author Max <max@nextcloud.com>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -
-  -->
+  - SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 <template>
-	<div>
-		<NcActions data-text-preview-options="select"
-			class="preview-options"
-			@open="$emit('open')">
+	<NcActions
+		v-model="open"
+		data-text-link-options="select"
+		class="link-options"
+		@open="onOpen">
+		<template #icon>
+			<DotsVerticalIcon :size="20" />
+		</template>
+		<NcActionCaption :name="t('text', 'Preview options')" />
+		<NcActionRadio
+			data-text-preview-option="text-only"
+			name="preview-option"
+			value="text-only"
+			:modelValue="type"
+			@change="(e) => toggle(e.currentTarget.value)">
+			{{ t('text', 'Text only') }}
+		</NcActionRadio>
+		<NcActionRadio
+			data-text-preview-option="link-preview"
+			name="preview-option"
+			value="link-preview"
+			:modelValue="type"
+			@change="(e) => toggle(e.currentTarget.value)">
+			{{ t('text', 'Show link preview') }}
+		</NcActionRadio>
+
+		<NcActionSeparator />
+
+		<!-- Open link -->
+		<NcActionButton v-if="href" closeAfterClick @click="openLink">
 			<template #icon>
-				<DotsVerticalIcon :size="20" />
+				<OpenIcon :size="20" />
 			</template>
-			<NcActionCaption :name="t('text', 'Preview options')" />
-			<NcActionRadio data-text-preview-option="text-only"
-				close-after-click
-				name="preview-option"
-				value="text-only"
-				:checked="value === 'text-only'"
-				@change="e => $emit('update:value', e.currentTarget.value)">
-				{{ t('text', 'Text only') }}
-			</NcActionRadio>
-			<NcActionRadio data-text-preview-option="link-preview"
-				close-after-click
-				name="preview-option"
-				value="link-preview"
-				:checked="value === 'link-preview'"
-				@change="e => $emit('update:value', e.currentTarget.value)">
-				{{ t('text', 'Show link preview') }}
-			</NcActionRadio>
-			<NcActionSeparator />
-			<NcActionButton @click="e => $emit('update:value', 'delete-preview')">
-				<template #icon>
-					<DeleteIcon :size="20" />
-				</template>
-				{{ t('text','Remove link') }}
-			</NcActionButton>
-		</NcActions>
-	</div>
+			{{ t('text', 'Open in new tab') }}
+		</NcActionButton>
+
+		<!-- Copy link -->
+		<NcActionButton v-if="href" closeAfterClick @click="copyLink">
+			<template #icon>
+				<CheckIcon v-if="copySuccess" :size="20" />
+				<NcLoadingIcon v-else-if="copyLoading" :size="20" />
+				<ContentCopyIcon v-else :size="20" />
+			</template>
+			{{ t('text', 'Copy link') }}
+		</NcActionButton>
+
+		<!-- Remove link -->
+		<NcActionButton closeAfterClick @click="deleteNode">
+			<template #icon>
+				<DeleteOutlineIcon :size="20" />
+			</template>
+			{{ t('text', 'Remove link') }}
+		</NcActionButton>
+	</NcActions>
 </template>
 
 <script>
-import { NcActions, NcActionButton, NcActionRadio, NcActionCaption, NcActionSeparator } from '@nextcloud/vue'
+import { t } from '@nextcloud/l10n'
+import NcActionButton from '@nextcloud/vue/components/NcActionButton'
+import NcActionCaption from '@nextcloud/vue/components/NcActionCaption'
+import NcActionRadio from '@nextcloud/vue/components/NcActionRadio'
+import NcActions from '@nextcloud/vue/components/NcActions'
+import NcActionSeparator from '@nextcloud/vue/components/NcActionSeparator'
+import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import CheckIcon from 'vue-material-design-icons/Check.vue'
+import ContentCopyIcon from 'vue-material-design-icons/ContentCopy.vue'
 import DotsVerticalIcon from 'vue-material-design-icons/DotsVertical.vue'
-import DeleteIcon from 'vue-material-design-icons/Delete.vue'
+import OpenIcon from 'vue-material-design-icons/OpenInNew.vue'
+import DeleteOutlineIcon from 'vue-material-design-icons/TrashCanOutline.vue'
+import { useOpenLinkHandler } from '../../composables/useOpenLinkHandler.ts'
+import CopyToClipboardMixin from '../../mixins/CopyToClipboardMixin.js'
 
 export default {
 	name: 'PreviewOptions',
+
 	components: {
+		CheckIcon,
+		ContentCopyIcon,
 		DotsVerticalIcon,
 		NcActions,
 		NcActionButton,
 		NcActionCaption,
 		NcActionRadio,
 		NcActionSeparator,
-		DeleteIcon,
+		NcLoadingIcon,
+		DeleteOutlineIcon,
+		OpenIcon,
 	},
+
+	mixins: [CopyToClipboardMixin],
+
 	props: {
-		value: {
+		type: {
 			type: String,
 			required: true,
 		},
+
+		href: {
+			type: String,
+			default: '',
+		},
+	},
+
+	emits: ['toggle', 'open', 'delete'],
+
+	setup() {
+		const { openLinkHandler } = useOpenLinkHandler()
+		return { openLinkHandler }
+	},
+
+	data() {
+		return {
+			open: false,
+		}
+	},
+
+	computed: {
+		isPreview() {
+			return this.type === 'link-preview'
+		},
+	},
+
+	methods: {
+		onOpen() {
+			this.$emit('open')
+		},
+
+		toggle(type) {
+			this.open = false
+			this.$emit('toggle', type)
+		},
+
+		openLink() {
+			if (!this.href) {
+				return
+			}
+			this.openLinkHandler.openLink(this.href)
+		},
+
+		async copyLink() {
+			await this.copyToClipboard(this.href)
+		},
+
+		deleteNode() {
+			this.$emit('delete')
+		},
+
+		t,
 	},
 }
 </script>
 
 <style lang="scss" scoped>
-
-[data-text-preview-options] {
-	position: absolute;
-	left: -44px;
+div[contenteditable='false'] {
+	padding: 0;
+	margin: 0;
 }
-
 </style>

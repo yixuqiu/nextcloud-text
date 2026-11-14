@@ -1,6 +1,11 @@
-import Underline from './../../marks/Underline';
+/**
+ * SPDX-FileCopyrightText: 2021-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 import { getExtensionField } from '@tiptap/core'
-import { createCustomEditor } from '../helpers'
+import createCustomEditor from '../testHelpers/createCustomEditor.ts'
+import Underline from './../../marks/Underline.js'
 
 describe('Underline extension unit', () => {
 	it('exposes toMarkdown function', () => {
@@ -15,21 +20,15 @@ describe('Underline extension unit', () => {
 })
 
 describe('Underline extension integrated in the editor', () => {
-
 	it('is not active by default', () => {
-		const editor = createCustomEditor({
-			content: '<p>Test</p>',
-			extensions: [Underline],
-		})
+		const editor = createCustomEditor('<p>Test</p>', [Underline])
 		expect(editor.isActive('underline')).toBe(false)
+		editor.destroy()
 	})
 
 	it('is active within <u> tags', () => {
-		const editor = createCustomEditor({
-			content: '<p><u>Test</u></p>',
-			extensions: [Underline],
-		})
+		const editor = createCustomEditor('<p><u>Test</u></p>', [Underline])
 		expect(editor.isActive('underline')).toBe(true)
+		editor.destroy()
 	})
-
 })

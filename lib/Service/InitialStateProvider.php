@@ -1,19 +1,31 @@
 <?php
 
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Text\Service;
 
 use OCP\AppFramework\Services\IInitialState;
-use OCP\TextProcessing\IManager;
-use OCP\TextProcessing\ITaskType;
-use OCP\Translation\ITranslationManager;
+use OCP\TaskProcessing\IManager;
 
 class InitialStateProvider {
+	private const array ASSISTANT_TASK_TYPES = [
+		'core:text2text',
+		'core:text2text:formalization',
+		'core:text2text:headline',
+		'core:text2text:reformulation',
+		'core:text2text:simplification',
+		'core:text2text:summary',
+		'core:text2text:topics',
+	];
+
 	public function __construct(
-		private IInitialState $initialState,
-		private ConfigService $configService,
-		private ITranslationManager $translationManager,
-		private IManager $textProcessingManager,
-		private ?string $userId
+		private readonly IInitialState $initialState,
+		private readonly ConfigService $configService,
+		private readonly IManager $taskProcessingManager,
+		private readonly ?string $userId,
 	) {
 	}
 
@@ -29,6 +41,11 @@ class InitialStateProvider {
 		);
 
 		$this->initialState->provideInitialState(
+			'open_read_only_enabled',
+			$this->configService->isOpenReadOnlyEnabled()
+		);
+
+		$this->initialState->provideInitialState(
 			'default_file_extension',
 			$this->configService->getDefaultFileExtension()
 		);
@@ -38,26 +55,35 @@ class InitialStateProvider {
 			$this->configService->isRichEditingEnabled()
 		);
 
+		$taskTypes = $this->taskProcessingManager->getAvailableTaskTypes();
+
 		$this->initialState->provideInitialState(
-			'translation_can_detect',
-			$this->translationManager->canDetectLanguage()
+			'translation_available',
+			isset($taskTypes['core:text2text:translate']),
+		);
+
+		$filteredTypes = array_filter($taskTypes, static fn (string $taskType) => in_array($taskType, self::ASSISTANT_TASK_TYPES, true), ARRAY_FILTER_USE_KEY);
+		$this->initialState->provideInitialState(
+			'taskprocessing',
+			array_map(static function (string $typeId, array $taskType) {
+				$taskType['id'] = $typeId;
+				return $taskType;
+			}, array_keys($filteredTypes), array_values($filteredTypes)),
 		);
 
 		$this->initialState->provideInitialState(
-			'translation_languages',
-			$this->translationManager->getLanguages()
+			'notify_push',
+			$this->configService->isNotifyPushSyncEnabled(),
 		);
 
 		$this->initialState->provideInitialState(
-			'textprocessing',
-			array_map(function (string $className) {
-				/** @var class-string<ITaskType> $className */
-				$type = \OCP\Server::get($className);
-				return [
-					'task' => $className,
-					'name' => $type->getName(),
-				];
-			}, $this->textProcessingManager->getAvailableTaskTypes()),
+			'is_full_width_editor',
+			$this->configService->isFullWidthEditor($this->userId),
+		);
+
+		$this->initialState->provideInitialState(
+			'offline_readonly_delay',
+			$this->configService->getOfflineReadonlyDelay(),
 		);
 	}
 

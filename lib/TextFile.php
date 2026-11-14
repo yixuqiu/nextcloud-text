@@ -3,25 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2022 Raul Ferreira Fuentes <raul@nextcloud.com>
- *
- * @author Raul Ferreira Fuentes <raul@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text;
@@ -34,12 +17,10 @@ use OCP\Files\SimpleFS\ISimpleFile;
  * Wrapper around a ISimpleFile object to ensure that it is correctly encoded (UTF-8) for the text app.
  */
 class TextFile implements ISimpleFile {
-	private ISimpleFile $file;
-	private EncodingService $encodingService;
-
-	public function __construct(ISimpleFile $file, EncodingService $encodingService) {
-		$this->file = $file;
-		$this->encodingService = $encodingService;
+	public function __construct(
+		private readonly ISimpleFile $file,
+		private readonly EncodingService $encodingService,
+	) {
 	}
 
 	public function getName(): string {

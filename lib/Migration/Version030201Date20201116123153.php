@@ -2,22 +2,25 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Text\Migration;
 
 use Closure;
-use Doctrine\DBAL\Types\Types;
 use OCP\DB\ISchemaWrapper;
-use OCP\IConfig;
+use OCP\DB\Types;
+use OCP\IDBConnection;
 use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 class Version030201Date20201116123153 extends SimpleMigrationStep {
+	private readonly bool $isOracle;
 
-	/** @var bool */
-	private $isOracle;
-
-	public function __construct(IConfig $config) {
-		$this->isOracle = $config->getSystemValue('dbtype', 'sqlite') === 'oci';
+	public function __construct(IDBConnection $connection) {
+		$this->isOracle = $connection->getDatabaseProvider() === IDBConnection::PLATFORM_ORACLE;
 	}
 
 	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {

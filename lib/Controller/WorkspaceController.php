@@ -1,47 +1,10 @@
 <?php
-/**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
- */
 
 declare(strict_types=1);
+
 /**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text\Controller;
@@ -59,7 +22,6 @@ use OCP\Constants;
 use OCP\DirectEditing\IManager as IDirectEditingManager;
 use OCP\DirectEditing\RegisterDirectEditorEvent;
 use OCP\EventDispatcher\IEventDispatcher;
-use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\NotFoundException;
@@ -75,26 +37,30 @@ class WorkspaceController extends OCSController {
 	public function __construct(
 		string $appName,
 		IRequest $request,
-		private IRootFolder $rootFolder,
-		private IManager $shareManager,
-		private IDirectEditingManager $directEditingManager,
-		private IURLGenerator $urlGenerator,
-		private WorkspaceService $workspaceService,
-		private IEventDispatcher $eventDispatcher,
-		private LoggerInterface $logger,
-		private ISession $session,
-		private ?string $userId
+		private readonly IRootFolder $rootFolder,
+		private readonly IManager $shareManager,
+		private readonly IDirectEditingManager $directEditingManager,
+		private readonly IURLGenerator $urlGenerator,
+		private readonly WorkspaceService $workspaceService,
+		private readonly IEventDispatcher $eventDispatcher,
+		private readonly LoggerInterface $logger,
+		private readonly ISession $session,
+		private readonly ?string $userId,
 	) {
 		parent::__construct($appName, $request);
 	}
 
 	/**
-	 * Checks for available files in the current folder and returns required details to present
-	 * the rich workspace
+	 * Checks for available files in the current folder and returns required
+	 * details to present the rich workspace.
+	 *
+	 * Returns 200 with file metadata and folder permissions if a README is found,
+	 * or 404 with folder permissions if not (so the client can still offer to create one).
+	 *
+	 * @param string $path Path relative to the user's root folder
 	 */
 	#[NoAdminRequired]
 	public function folder(string $path = '/'): DataResponse {
-		/**  */
 		try {
 			/** @psalm-suppress PossiblyNullArgument */
 			$userFolder = $this->rootFolder->getUserFolder($this->userId);
@@ -133,9 +99,11 @@ class WorkspaceController extends OCSController {
 	}
 
 	/**
-	 * Checks for available files in the current folder and returns required details to present
-	 * the rich workspace
-	 * @api
+	 * Checks for available files in a publicly shared folder and returns required
+	 * details to present the rich workspace.
+	 *
+	 * @param string $shareToken Public share token
+	 * @param string $path Path relative to the share root
 	 */
 	#[NoAdminRequired]
 	#[PublicPage]
@@ -147,14 +115,16 @@ class WorkspaceController extends OCSController {
 			}
 			/** @psalm-suppress RedundantConditionGivenDocblockType */
 			if ($share->getPassword() !== null) {
-				$shareId = $this->session->get('public_link_authenticated');
-				if ($share->getId() !== $shareId) {
+				$shareIds = $this->session->get('public_link_authenticated');
+				$shareIds = is_array($shareIds) ? $shareIds : [$shareIds];
+
+				if (!in_array($share->getId(), $shareIds, true)) {
 					throw new ShareNotFound();
 				}
 			}
 
 			$shareNode = $share->getNode();
-			$node = $shareNode instanceof File ? $shareNode : $shareNode->get($path);
+			$node = $shareNode instanceof Folder ? $shareNode->get($path) : $shareNode;
 			if ($node instanceof Folder) {
 				$file = $this->workspaceService->getFile($node);
 				if ($file === null) {
@@ -180,6 +150,14 @@ class WorkspaceController extends OCSController {
 		return new DataResponse(['message' => 'No workspace file found'], Http::STATUS_NOT_FOUND);
 	}
 
+	/**
+	 * Returns a direct editing URL for the workspace README in the given folder.
+	 *
+	 * If a README file already exists, opens it for editing. If not, creates a new
+	 * file using the first entry of getSupportedFilenames() as the default name.
+	 *
+	 * @param string $path Path to the folder, relative to the user's root folder
+	 */
 	#[NoAdminRequired]
 	public function direct(string $path): DataResponse {
 		$this->eventDispatcher->dispatchTyped(new RegisterDirectEditorEvent($this->directEditingManager));
@@ -188,11 +166,15 @@ class WorkspaceController extends OCSController {
 			/** @psalm-suppress PossiblyNullArgument */
 			$folder = $this->rootFolder->getUserFolder($this->userId)->get($path);
 			if ($folder instanceof Folder) {
-				$file = $this->getFile($folder);
+				$file = $this->workspaceService->getFile($folder);
 				if ($file === null) {
-					$token = $this->directEditingManager->create($path . '/'. $this->workspaceService->getSupportedFilenames()[0], Application::APP_NAME, TextDocumentCreator::CREATOR_ID);
+					$token = $this->directEditingManager->create(
+						$path . '/' . WorkspaceService::DEFAULT_FILENAME,
+						Application::APP_NAME,
+						TextDocumentCreator::CREATOR_ID
+					);
 				} else {
-					$token = $this->directEditingManager->open($path . '/'. $file->getName(), Application::APP_NAME);
+					$token = $this->directEditingManager->open($path . '/' . $file->getName(), Application::APP_NAME);
 				}
 				return new DataResponse([
 					'url' => $this->urlGenerator->linkToRouteAbsolute('files.DirectEditingView.edit', ['token' => $token])
@@ -204,19 +186,5 @@ class WorkspaceController extends OCSController {
 		}
 
 		return new DataResponse(['message' => 'No workspace file found'], Http::STATUS_NOT_FOUND);
-	}
-
-	private function getFile(Folder $folder): ?File {
-		$file = null;
-		foreach ($this->workspaceService->getSupportedFilenames() as $filename) {
-			try {
-				$node = $folder->get($filename);
-				if ($node instanceof File) {
-					$file = $node;
-				}
-			} catch (NotFoundException) {
-			}
-		}
-		return $file;
 	}
 }

@@ -1,21 +1,6 @@
 /**
- * @copyright Copyright (c) 2022
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 import { initUserAndFiles, randUser } from '../../utils/index.js'
@@ -34,10 +19,12 @@ describe('Front matter support', function() {
 
 	it('Open file with front matter', function() {
 		cy.openFile('frontmatter.md').then(() => {
-			cy.getContent().find('pre.frontmatter').should(pre => {
-				expect(pre.length === 1)
-				expect(pre[0].text === 'some: value\nother: 1.2')
-			})
+			cy.getContent()
+				.find('pre.frontmatter')
+				.should((pre) => {
+					expect(pre.length === 1)
+					expect(pre[0].text === 'some: value\nother: 1.2')
+				})
 		})
 	})
 
@@ -45,10 +32,12 @@ describe('Front matter support', function() {
 		cy.openFile('empty.md').clearContent()
 		cy.getContent().type('---')
 		cy.getContent().type('test')
-		cy.getContent().find('pre.frontmatter').should(pre => {
-			expect(pre.length === 1)
-			expect(pre[0].text === 'test')
-		})
+		cy.getContent()
+			.find('pre.frontmatter')
+			.should((pre) => {
+				expect(pre.length === 1)
+				expect(pre[0].text === 'test')
+			})
 	})
 
 	it('Do not add multiple front matter', function() {
@@ -56,16 +45,20 @@ describe('Front matter support', function() {
 		cy.getContent().type('---test')
 		cy.getContent().type('{downArrow}')
 		cy.getContent().type('---test')
-		cy.getContent().find('pre.frontmatter').should(pre => expect(pre.length === 1))
-		cy.getContent().find('hr').should(hr => expect(hr.length === 1))
+		cy.getContent()
+			.find('pre.frontmatter')
+			.should((pre) => expect(pre.length === 1))
+		cy.getContent()
+			.find('hr')
+			.should((hr) => expect(hr.length === 1))
 	})
 
 	it('Reopen front matter', function() {
 		cy.openFile('frontmatter.md')
+		cy.getContent().type('{moveToEnd}New line{enter}')
 		cy.getContent()
-			.type('{moveToEnd}New line{enter}')
-		cy.getContent()
-			.find('pre.frontmatter').should(pre => {
+			.find('pre.frontmatter')
+			.should((pre) => {
 				expect(pre.length === 1)
 			})
 		cy.closeFile()

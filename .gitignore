@@ -1,18 +1,22 @@
-build/
 \.idea/
+build/
 node_modules/
-vendor/
-img/twemoji/
-cypress/screenshots/
-cypress/snapshots/actual
-cypress/snapshots/diff
-cypress/videos/
 cypress/downloads/
-.php-cs-fixer.cache
-/tests/clover.xml
-/tests/.phpunit.result.cache
+cypress/screenshots/
+cypress/snapshots/
+cypress/videos/
 dist/
+/playwright-report/
+.php-cs-fixer.cache
+/test-results/
+/tests/.phpunit.result.cache
+/vendor/
+/vendor-bin/*/vendor
 webpack-stats.json
 
 # js folder, to be updated wth --force
 /js
+
+# Playwright snapshots - only keep the ci version in git
+playwright/e2e/*-snapshots/**
+!playwright/e2e/*-snapshots/*-on-ci-**

@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Text;
 
 use InvalidArgumentException;
@@ -19,18 +24,18 @@ use InvalidArgumentException;
  */
 class YjsMessage {
 
-	public const YJS_MESSAGE_SYNC = 0;
-	public const YJS_MESSAGE_AWARENESS = 1;
-	public const YJS_MESSAGE_AWARENESS_QUERY = 3;
+	public const int YJS_MESSAGE_SYNC = 0;
+	public const int YJS_MESSAGE_AWARENESS = 1;
+	public const int YJS_MESSAGE_AWARENESS_QUERY = 3;
 
-	public const YJS_MESSAGE_SYNC_STEP1 = 0;
-	public const YJS_MESSAGE_SYNC_STEP2 = 1;
-	public const YJS_MESSAGE_SYNC_UPDATE = 2;
+	public const int YJS_MESSAGE_SYNC_STEP1 = 0;
+	public const int YJS_MESSAGE_SYNC_STEP2 = 1;
+	public const int YJS_MESSAGE_SYNC_UPDATE = 2;
 
 	private int $pos = 0;
 
 	public function __construct(
-		private string $data = ''
+		private readonly string $data = '',
 	) {
 	}
 
@@ -42,7 +47,8 @@ class YjsMessage {
 	 * https://github.com/dmonad/lib0/blob/bd69ab4dc701d77e808f2bab08d96d63acd297da/decoding.js#L242
 	 */
 	public function readVarUint(): int {
-		$bytes = array_values(unpack('C*', $this->data));
+		$values = unpack('C*', $this->data);
+		$bytes = array_values($values !== false ? $values : []);
 		$num = 0;
 		$mult = 1;
 		$len = count($bytes);
@@ -80,6 +86,19 @@ class YjsMessage {
 		$syncType = $this->readVarUint();
 		$this->pos = $oldPos;
 		return $syncType;
+	}
+
+	/**
+	 * Based on https://github.com/yjs/y-protocols/blob/master/PROTOCOL.md#handling-read-only-users
+	 */
+	public function isUpdate(): bool {
+		if ($this->getYjsMessageType() === self::YJS_MESSAGE_SYNC) {
+			if (in_array($this->getYjsSyncType(), [self::YJS_MESSAGE_SYNC_STEP2, self::YJS_MESSAGE_SYNC_UPDATE])) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 }

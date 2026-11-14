@@ -1,8 +1,12 @@
-import markdownit from '../../markdownit'
-import stripIndent from './stripIndent'
+/**
+ * SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+import markdownit from '../../markdownit/index.ts'
+import stripIndent from './stripIndent.js'
 
 describe('task list extension', () => {
-
 	it('renders task lists', () => {
 		const rendered = markdownit.render('* [ ] task\n* not a task')
 		expect(stripIndent(rendered)).toBe(stripIndent(`
@@ -11,9 +15,6 @@ describe('task list extension', () => {
 			</ul>
 			<ul data-bullet="*">
 			<li>not a task</li>
-			</ul>`
-			))
+			</ul>`))
 	})
-
 })
-

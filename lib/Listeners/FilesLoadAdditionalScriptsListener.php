@@ -2,42 +2,27 @@
 
 declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2020 Morris Jobke <hey@morrisjobke.de>
- *
- * @author Morris Jobke <hey@morrisjobke.de>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text\Listeners;
 
 use OCA\Files\Event\LoadAdditionalScriptsEvent;
 use OCA\Text\Service\InitialStateProvider;
+use OCP\Collaboration\Reference\RenderReferenceEvent;
 use OCP\EventDispatcher\Event;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\EventDispatcher\IEventListener;
 
 /**
  * @implements IEventListener<Event>
  */
 class FilesLoadAdditionalScriptsListener implements IEventListener {
-	private InitialStateProvider $initialStateProvider;
-
-	public function __construct(InitialStateProvider $initialStateProvider) {
-		$this->initialStateProvider = $initialStateProvider;
+	public function __construct(
+		private readonly InitialStateProvider $initialStateProvider,
+		private readonly IEventDispatcher $eventDispatcher,
+	) {
 	}
 
 	public function handle(Event $event): void {
@@ -47,7 +32,13 @@ class FilesLoadAdditionalScriptsListener implements IEventListener {
 
 		\OCP\Util::addInitScript('text', 'text-init');
 		\OCP\Util::addScript('text', 'text-files');
+		// Add associated styles
+		\OCP\Util::addStyle('text', 'text-init');
+		\OCP\Util::addStyle('text', 'text-files');
 
 		$this->initialStateProvider->provideState();
+		// The viewer no longer has an event of its own to hang this on: the
+		// smart picker and link previews of a file opened from here need it
+		$this->eventDispatcher->dispatchTyped(new RenderReferenceEvent());
 	}
 }

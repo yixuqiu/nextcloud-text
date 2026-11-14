@@ -1,99 +1,90 @@
 <!--
-  - @copyright Copyright (c) 2022 Max <max@nextcloud.com>
-  -
-  - @author Max <max@nextcloud.com>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -
-  -->
+  - SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
-	<div data-text-el="editor-content-wrapper"
-		class="content-wrapper text-editor__content-wrapper"
-		:class="{
-			'--show-outline': showOutline
-		}">
-		<div v-if="showOutline" class="text-editor__content-wrapper__left">
-			<EditorOutline />
-		</div>
+	<div
+		data-text-el="editor-content-wrapper"
+		class="editor__content-wrapper"
+		:class="{ 'editor--annotations-hidden': annotationsHidden }">
 		<slot />
-		<EditorContent role="document"
+		<FloatingButtons v-if="showFloatingButtons" />
+		<EditorContent
+			role="document"
 			class="editor__content text-editor__content"
-			:editor="$editor" />
-		<div class="text-editor__content-wrapper__right" />
+			:editor="editor" />
+		<TocContainer v-if="hasTableOfContents" />
 	</div>
 </template>
 
 <script>
-import { EditorContent } from '@tiptap/vue-2'
-import { useEditorMixin } from '../Editor.provider.js'
-import { useOutlineStateMixin } from './Wrapper.provider.js'
-import EditorOutline from './EditorOutline.vue'
+import { useIsMobile } from '@nextcloud/vue/composables/useIsMobile'
+import { EditorContent } from '@tiptap/vue-3'
+import FloatingButtons from './FloatingButtons.vue'
+import TocContainer from './TableOfContents/TocContainer.vue'
+import { useAnnotationsHidden } from '../../composables/useAnnotationsHidden.ts'
+import { useEditor } from '../../composables/useEditor.ts'
+import { useEditorFlags } from '../../composables/useEditorFlags.ts'
 
 export default {
 	name: 'ContentContainer',
 	components: {
 		EditorContent,
-		EditorOutline,
+		FloatingButtons,
+		TocContainer,
 	},
-	mixins: [useEditorMixin, useOutlineStateMixin],
+
+	props: {
+		readOnly: {
+			type: Boolean,
+			required: true,
+		},
+	},
+
+	setup() {
+		const isMobile = useIsMobile()
+		const { editor } = useEditor()
+		const { isRichEditor, isRichWorkspace, hasTableOfContents }
+			= useEditorFlags()
+		const annotationsHidden = useAnnotationsHidden(editor)
+		return {
+			annotationsHidden,
+			editor,
+			isMobile,
+			isRichEditor,
+			isRichWorkspace,
+			hasTableOfContents,
+		}
+	},
+
 	computed: {
-		showOutline() {
-			return this.$outlineState.visible
+		showFloatingButtons() {
+			return (
+				!this.readOnly
+				&& !this.isMobile
+				&& this.isRichEditor
+				&& !this.isRichWorkspace
+			)
 		},
 	},
 }
 </script>
 
 <style scoped lang="scss">
-	.editor__content {
-		max-width: min(var(--text-editor-max-width), calc(100vw - 16px));
-		margin: auto;
-		position: relative;
-		width: 100%;
-	}
+.editor__content-wrapper {
+	display: flex;
+	flex-grow: 1;
+}
 
-	.ie {
-		.editor__content:deep(.ProseMirror) {
-			padding-top: 50px;
-		}
+.editor__content {
+	flex-grow: 1;
+	max-width: var(--text-editor-max-width);
+	margin: 0 auto;
+	position: relative;
+	:deep([contenteditable]) {
+		// drop off obsolete server styles
+		margin: 0 !important;
 	}
-
-	.text-editor__content-wrapper {
-		--side-width: calc((100% - var(--text-editor-max-width)) / 2);
-		display: grid;
-		grid-template-columns: 1fr auto;
-		&.--show-outline {
-			grid-template-columns: var(--side-width) auto var(--side-width);
-		}
-		.text-editor__content-wrapper__left,
-		.text-editor__content-wrapper__right {
-			height: 100%;
-			position: relative;
-		}
-	}
-
-	.is-rich-workspace {
-		.text-editor__content-wrapper {
-			--side-width: var(--text-editor-max-width);
-			grid-template-columns: var(--side-width) auto;
-			.text-editor__content-wrapper__left,
-			.text-editor__content-wrapper__right {
-				display: none;
-			}
-		}
-	}
+}
 </style>

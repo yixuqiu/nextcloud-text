@@ -1,24 +1,33 @@
-import TaskList from './../../nodes/TaskList'
-import TaskItem from './../../nodes/TaskItem'
-import Markdown from './../../extensions/Markdown'
+/**
+ * SPDX-FileCopyrightText: 2021-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 import { getExtensionField } from '@tiptap/core'
-import { createCustomEditor, markdownThroughEditor, markdownThroughEditorHtml } from '../helpers'
+import EditableTable from '../../nodes/EditableTable.ts'
+import testEditor from '../testHelpers/testEditor.js'
+import RichText from './../../extensions/RichText.js'
+import TaskItem from './../../nodes/TaskItem.ts'
+
+const test = testEditor.override('allExtensions', [
+	RichText.configure({
+		editing: false, // disable the Placeholder which needs a real browser
+		extensions: [EditableTable],
+	}),
+])
 
 describe('TaskItem extension', () => {
-	it('exposes toMarkdown function', () => {
+	test('exposes toMarkdown function', () => {
 		const toMarkdown = getExtensionField(TaskItem, 'toMarkdown', TaskItem)
 		expect(typeof toMarkdown).toEqual('function')
 	})
 
-	it('exposes the toMarkdown function in the prosemirror schema', () => {
-		const editor = createCustomEditor({
-			extensions: [Markdown, TaskList, TaskItem]
-		})
+	test('exposes the toMarkdown function in the prosemirror schema', ({ editor }) => {
 		const taskItem = editor.schema.nodes.taskItem
 		expect(taskItem.spec.toMarkdown).toBeDefined()
 	})
 
-	it('markdown syntax is preserved through editor', () => {
+	test('markdown syntax is preserved through editor', ({ markdownThroughEditor }) => {
 		// Invalid ones but should be syntactical unchanged
 		expect(markdownThroughEditor('- [F] asd')).toBe('- [F] asd')
 		expect(markdownThroughEditor('- [ [asd](sdf)')).toBe('- [ [asd](sdf)')
@@ -30,22 +39,17 @@ describe('TaskItem extension', () => {
 		expect(markdownThroughEditor('- [ ] [asd](sdf)')).toBe('- [ ] [asd](sdf)')
 		expect(markdownThroughEditor('- [x] [asd](sdf)')).toBe('- [x] [asd](sdf)')
 		expect(markdownThroughEditor('- [ ] foo\n- [x] bar')).toBe('- [ ] foo\n- [x] bar')
-		expect(markdownThroughEditor('- [x] foo\n' +
-			'  - [ ] bar\n' +
-			'  - [x] baz\n' +
-			'- [ ] bim')).toBe('- [x] foo\n' +
-				'  - [ ] bar\n' +
-				'  - [x] baz\n' +
-				'- [ ] bim')
+		expect(markdownThroughEditor('- [x] foo\n  - [ ] bar\n  - [x] baz\n- [ ] bim')).toBe('- [x] foo\n  - [ ] bar\n  - [x] baz\n- [ ] bim')
 		expect(markdownThroughEditor('- [X] asd')).toBe('- [x] asd')
 		expect(markdownThroughEditor('-   [X] asd')).toBe('- [x] asd')
 	})
 
-	it('serializes HTML to markdown', () => {
+	test('serializes HTML to markdown', ({ markdownThroughEditorHtml }) => {
 		expect(markdownThroughEditorHtml('<ul class="contains-task-list"><li><input type="checkbox" checked /><label>foo</label></li></ul>')).toBe('- [x] foo')
 		expect(markdownThroughEditorHtml('<ul class="contains-task-list"><li><input type="checkbox" /><label>test</label></li></ul>')).toBe('- [ ] test')
-		expect(markdownThroughEditorHtml('<ul class="contains-task-list"><li><input type="checkbox" checked /><div><h2>Test</h2><p><strong>content</strong></p></div></li></ul>')).toBe('- [x] Test\n\n  **content**')
+		// First text node becomes first paragraph in taskItem
+		expect(markdownThroughEditorHtml('<ul class="contains-task-list"><li><input type="checkbox" checked />test<h2>Headline</h2><p><strong>content</strong></p></li></ul>')).toBe('- [x] test\n\n  ## Headline\n\n  **content**')
+		// Second block element stays indented (stays part of taskItem)
 		expect(markdownThroughEditorHtml('<ul class="contains-task-list"><li><input type="checkbox" checked /><p>Test</p><h1>Block level headline</h1></li></ul>')).toBe('- [x] Test\n\n  # Block level headline')
 	})
-
 })

@@ -1,3 +1,8 @@
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 import { randUser } from '../../utils/index.js'
 
 const user = randUser()
@@ -40,7 +45,10 @@ describe('Image View', () => {
 		it('from child folder', () => {
 			const fileName = `${Cypress.currentTest.title}.md`
 
-			cy.createMarkdown(fileName, '# from child\n\n ![git](child-folder/github.png)')
+			cy.createMarkdown(
+				fileName,
+				'# from child\n\n ![git](child-folder/github.png)',
+			)
 
 			cy.openFile(fileName)
 
@@ -52,7 +60,10 @@ describe('Image View', () => {
 			cy.getContent()
 				.find('[data-component="image-view"] img')
 				.should('have.attr', 'src')
-				.should('contains', `/dav/files/${user.userId}/child-folder/github.png`)
+				.should(
+					'contains',
+					`/dav/files/${user.userId}/child-folder/github.png`,
+				)
 		})
 
 		it('from parent folder', () => {
@@ -60,7 +71,10 @@ describe('Image View', () => {
 
 			const fileName = `${Cypress.currentTest.title}.md`
 
-			cy.createMarkdown(`/child-folder/${fileName}`, '# from parent\n\n ![git](../github.png)')
+			cy.createMarkdown(
+				`/child-folder/${fileName}`,
+				'# from parent\n\n ![git](../github.png)',
+			)
 
 			cy.openFile(fileName, { force: true })
 
@@ -105,15 +119,23 @@ describe('Image View', () => {
 	describe('native attachments', () => {
 		before(() => {
 			cy.login(user)
-			cy.visit('/apps/files')
 			const fileName = 'native attachments.md'
-			cy.createMarkdown(fileName, '# open image in modal\n\n ![git](.attachments.123/github.png)\n\n ![file.txt.gz](.attachments.123/file.txt.gz)')
-
-			cy.getFileId(fileName).then((fileId) => {
+			cy.createFile(
+				fileName,
+				'# open image in modal\n\n ![git](.attachments.123/github.png)\n\n ![file.txt.gz](.attachments.123/file.txt.gz)',
+			).then((fileId) => {
 				const attachmentsFolder = `.attachments.${fileId}`
 				cy.createFolder(attachmentsFolder)
-				cy.uploadFile('github.png', 'image/png', `${attachmentsFolder}/github.png`)
-				cy.uploadFile('file.txt.gz', 'application/gzip', `${attachmentsFolder}/file.txt.gz`)
+				cy.uploadFile(
+					'github.png',
+					'image/png',
+					`${attachmentsFolder}/github.png`,
+				)
+				cy.uploadFile(
+					'file.txt.gz',
+					'application/gzip',
+					`${attachmentsFolder}/file.txt.gz`,
+				)
 			})
 		})
 

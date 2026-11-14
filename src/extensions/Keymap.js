@@ -1,34 +1,31 @@
-/*
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+/**
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+import { emit } from '@nextcloud/event-bus'
 import { Extension } from '@tiptap/core'
 import { Plugin } from '@tiptap/pm/state'
 
 const Keymap = Extension.create({
-
-	name: 'customkeymap',
+	name: 'CustomKeymap',
 
 	addKeyboardShortcuts() {
-		return this.options
+		return {
+			/**
+			 * <Mod>-<Alt>-<H>
+			 * Toggle editor outline
+			 */
+			'Mod-Alt-h': () => {
+				emit('text:toc:toggle')
+				return true
+			},
+			/**
+			 * <Backspace>
+			 * Allows to undo input rules after they got automatically applied
+			 */
+			Backspace: () => this.editor.commands.undoInputRule(),
+		}
 	},
 
 	addProseMirrorPlugins() {
@@ -36,26 +33,56 @@ const Keymap = Extension.create({
 			new Plugin({
 				props: {
 					handleKeyDown(view, event) {
-						const key = event.key || event.keyCode
-						if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (key === 'f' || key === 70)) {
-							// We need to stop propagation and dispatch the event on the window
-							// in order to force triggering the browser native search in the text editor
+						/**
+						 * <Mod>-<S>
+						 * Save editor content
+						 */
+						if (
+							(event.ctrlKey || event.metaKey)
+							&& !event.altKey
+							&& !event.shiftKey
+							&& event.key === 's'
+						) {
+							event.preventDefault()
 							event.stopPropagation()
-							window.dispatchEvent(event)
+							emit('text:keyboard:save')
 							return true
 						}
-						if (event.key === 'Delete' && event.ctrlKey === true) {
-							// Prevent deleting the file, by core Viewer.vue
+
+						/**
+						 * <Esc>
+						 * Overwrite Viewer keybinding to close viewer
+						 */
+						if (
+							!event.ctrlKey
+							&& !event.metaKey
+							&& !event.altKey
+							&& !event.shiftKey
+							&& event.key === 'Escape'
+						) {
+							event.preventDefault()
 							event.stopPropagation()
-							window.dispatchEvent(event)
 							return true
+						}
+
+						/**
+						 * <Mod>-<Del>
+						 * Prevent Viewer keybinding to delete the file, but don't prevent
+						 * browser keybinding to delete word after cursor.
+						 */
+						if (
+							(event.ctrlKey || event.metaKey)
+							&& !event.altKey
+							&& !event.shiftKey
+							&& event.key === 'Delete'
+						) {
+							event.stopPropagation()
 						}
 					},
 				},
 			}),
 		]
 	},
-
 })
 
 export default Keymap

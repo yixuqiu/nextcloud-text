@@ -1,0 +1,61 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renders hasConnectionIssue 1`] = `
+"<nc-note-card-stub data-v-56029fad="" showalert="false" type="warning">
+  <div data-v-56029fad="" class="notecard-content">
+    <div data-v-56029fad="">The document could not be loaded. Please check your internet connection.</div>
+    <nc-button-stub data-v-56029fad="" alignment="center" disabled="false" size="normal" target="_self" type="button" variant="primary" wide="false" class="notecard-button">Reconnect</nc-button-stub>
+  </div>
+</nc-note-card-stub>"
+`;
+
+exports[`renders idle 1`] = `
+"<nc-note-card-stub data-v-56029fad="" showalert="false" type="info">
+  <div data-v-56029fad="" class="notecard-content">
+    <div data-v-56029fad="">You've been disconnected from the server.</div>
+    <nc-button-stub data-v-56029fad="" alignment="center" disabled="false" size="normal" target="_self" type="button" variant="primary" wide="false" class="notecard-button">Reconnect</nc-button-stub>
+  </div>
+</nc-note-card-stub>"
+`;
+
+exports[`renders sync error 0 1`] = `
+"<nc-note-card-stub data-v-56029fad="" showalert="false" type="warning">
+  <div data-v-56029fad="" class="notecard-content">
+    <div data-v-56029fad="">The file was overwritten. Your current changes cannot be auto-saved. Please choose how to proceed.</div>
+    <!--v-if-->
+  </div>
+</nc-note-card-stub>"
+`;
+
+exports[`renders sync error 1 1`] = `
+"<nc-note-card-stub data-v-56029fad="" showalert="false" type="warning">
+  <!--v-if-->
+</nc-note-card-stub>"
+`;
+
+exports[`renders sync error 2 1`] = `
+"<nc-note-card-stub data-v-56029fad="" showalert="false" type="warning">
+  <div data-v-56029fad="" class="notecard-content">
+    <div data-v-56029fad="">Error Message goes here</div>
+    <nc-button-stub data-v-56029fad="" alignment="center" disabled="false" size="normal" target="_self" type="button" variant="primary" wide="false" class="notecard-button">Reload</nc-button-stub>
+  </div>
+</nc-note-card-stub>"
+`;
+
+exports[`renders sync error 3 1`] = `
+"<nc-note-card-stub data-v-56029fad="" showalert="false" type="warning">
+  <!--v-if-->
+</nc-note-card-stub>"
+`;
+
+exports[`renders sync error 4 1`] = `
+"<nc-note-card-stub data-v-56029fad="" showalert="false" type="warning">
+  <!--v-if-->
+</nc-note-card-stub>"
+`;
+
+exports[`renders sync error 5 1`] = `
+"<nc-note-card-stub data-v-56029fad="" showalert="false" type="warning">
+  <!--v-if-->
+</nc-note-card-stub>"
+`;

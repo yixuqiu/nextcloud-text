@@ -1,24 +1,8 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Text\Db;
@@ -26,6 +10,7 @@ namespace OCA\Text\Db;
 use JsonSerializable;
 use OCA\Text\Exception\InvalidSessionException;
 use OCP\AppFramework\Db\Entity;
+use OCP\DB\Types;
 
 /**
  * @method void setUserId(?string $userId)
@@ -39,8 +24,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setLastAwarenessMessage(string $message)
  * @method int getLastContact()
  * @method void setLastContact(int $getTime)
- * @method int getDocumentId()
- * @method void setDocumentId(int $documentId)
+ * @method string getDocumentId()
+ * @method void setDocumentId(string $documentId)
  */
 class Session extends Entity implements JsonSerializable {
 	public $id;
@@ -50,12 +35,11 @@ class Session extends Entity implements JsonSerializable {
 	protected ?string $guestName = null;
 	protected ?string $lastAwarenessMessage = '';
 	protected int $lastContact = 0;
-	protected int $documentId = 0;
+	protected string $documentId = '';
 
 	public function __construct() {
-		$this->addType('id', 'integer');
-		$this->addType('documentId', 'integer');
-		$this->addType('lastContact', 'integer');
+		$this->addType('documentId', Types::STRING);
+		$this->addType('lastContact', Types::INTEGER);
 	}
 
 	public function isGuest(): bool {
@@ -71,7 +55,7 @@ class Session extends Entity implements JsonSerializable {
 
 	public function jsonSerialize(): array {
 		return [
-			'id' => $this->id,
+			'id' => $this->getId(),
 			'userId' => $this->userId,
 			'token' => $this->token,
 			'color' => $this->color,

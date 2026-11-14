@@ -1,17 +1,19 @@
-/* eslint-disable import/no-named-as-default */
-import OrderedList from '@tiptap/extension-ordered-list'
-import ListItem from '@tiptap/extension-list-item'
-/* eslint-enable import/no-named-as-default */
-import TaskList from './../../../src/nodes/TaskList.js'
-import TaskItem from './../../../src/nodes/TaskItem.js'
-import BulletList from './../../../src/nodes/BulletList.js'
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+import { ListItem, OrderedList } from '@tiptap/extension-list'
+// https://github.com/import-js/eslint-plugin-import/issues/1739
+import testData from '../../fixtures/ListItem.md?raw'
 import Markdown from './../../../src/extensions/Markdown.js'
+import BulletList from './../../../src/nodes/BulletList.ts'
+import TaskItem from './../../../src/nodes/TaskItem.ts'
+import TaskList from './../../../src/nodes/TaskList.ts'
 import { createCustomEditor } from './../../support/components.js'
-import testData from '../../fixtures/ListItem.md'
-import { loadMarkdown, runCommands, expectMarkdown } from './helpers.js'
+import { expectMarkdown, loadMarkdown, runCommands } from './helpers.js'
 
 describe('ListItem extension integrated in the editor', () => {
-
 	const editor = createCustomEditor({
 		content: '',
 		extensions: [
@@ -32,10 +34,10 @@ describe('ListItem extension integrated in the editor', () => {
 		}
 		it(description, () => {
 			expect(spec).to.include('\n')
-			/* eslint-disable no-unused-expressions */
+
 			expect(input).to.be.ok
 			expect(output).to.be.ok
-			/* eslint-enable no-unused-expressions */
+
 			loadMarkdown(editor, input)
 			runCommands(editor)
 			expectMarkdown(editor, output.replace(/\n*$/, ''))
